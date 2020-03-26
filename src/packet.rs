@@ -1,3 +1,5 @@
+use super::engine;
+
 // PACKET STRUCT AND FREELIST
 //
 // This module defines a struct to represent packets of network data, and
@@ -85,11 +87,19 @@ pub fn allocate() -> Box<Packet> {
 // is on the freelist. If a packet goes out of scope without being freed, the
 // attempt to Drop it will trigger a panic (see Packet). Hence we ensure that
 // all allocated packets are eventually freed.
-pub fn free(mut p: Box<Packet>) {
+fn free_internal(mut p: Box<Packet>) {
     if unsafe { FL.nfree } == FREELIST_SIZE { panic!("Packet freelist overflow"); }
     p.length = 0;
     unsafe { FL.list[FL.nfree] = &mut *p; } std::mem::forget(p);
     unsafe { FL.nfree += 1; }
+}
+pub fn free (mut p: Box<Packet>) {
+    engine::add_frees();
+    engine::add_freebytes(p.length as u64);
+    // Calculate bits of physical capacity required for packet on 10GbE
+    // Account for minimum data size and overhead of CRC and inter-packet gap
+    engine::add_freebits(((std::cmp::max(p.length, 46) + 4 + 5) * 8) as u64);
+    free_internal(p);
 }
 
 // pub fn debug() {

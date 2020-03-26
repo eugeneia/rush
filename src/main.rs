@@ -1,10 +1,15 @@
 mod packet;
 mod link;
+mod engine;
+mod config;
+mod basic_apps;
 
 fn main() {
     init();
     allocate();
     link();
+    config();
+    engine();
 }
 
 fn init() {
@@ -51,5 +56,47 @@ fn link() {
     }
     //link::receive(&mut r); // Would cause link underflow panic.
     println!("Received {} packets", n);
+    println!("link: rxpackets={} rxbytes={} txpackets={} txbytes={} txdrop={}",
+             r.rxpackets, r.rxbytes, r.txpackets, r.txbytes, r.txdrop);
     // Failing to drain the link would cause panic
+}
+
+fn config () {
+    let mut c = config::new();
+    println!("Created an empty configuration");
+    config::app(&mut c, "source", &basic_apps::Source {size: 60});
+    println!("Added an app");
+    config::link(&mut c, "source.output -> sink.input");
+    println!("Added an link");
+}
+
+fn engine() {
+    let mut s = engine::init();
+    println!("Initialized engine");
+    let mut c = config::new();
+    config::app(&mut c, "source", &basic_apps::Source {size: 60});
+    config::app(&mut c, "sink", &basic_apps::Sink {});
+    config::link(&mut c, "source.output -> sink.input");
+    engine::configure(&mut s, &c);
+    println!("Configured the app network: source(60).output -> sink.input");
+    engine::breathe(&s);
+    println!("Performed a single breath");
+    { let output =
+          s.link_table.get("source.output -> sink.input").unwrap().borrow();
+      println!("link: rxpackets={} rxbytes={} txdrop={}",
+               output.rxpackets, output.rxbytes, output.txdrop); }
+    let mut c = c.clone();
+    config::app(&mut c, "source", &basic_apps::Source {size: 120});
+    engine::configure(&mut s, &c);
+    println!("Cloned, mutated, and applied new configuration:");
+    println!("source(120).output -> sink.input");
+    engine::breathe(&s);
+    println!("Performed a single breath");
+    { let output =
+          s.link_table.get("source.output -> sink.input").unwrap().borrow();
+      println!("link: rxpackets={} rxbytes={} txdrop={}",
+               output.rxpackets, output.rxbytes, output.txdrop); }
+    let stats = engine::stats();
+    println!("engine: frees={} freebytes={} freebits={}",
+             stats.frees, stats.freebytes, stats.freebits);
 }

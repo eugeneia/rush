@@ -26,13 +26,19 @@ pub struct Link {
     // Two cursors:
     //   read:  the next element to be read
     //   write: the next element to be written
-    read: i32, write: i32
+    read: i32, write: i32,
+    // Link stats:
+    pub txpackets: u64, pub txbytes: u64, pub txdrop: u64,
+    pub rxpackets: u64, pub rxbytes: u64
 }
 
 const SIZE: i32 = LINK_RING_SIZE as i32; // shorthand
 
 pub fn new() -> Link {
-    Link { packets: [std::ptr::null_mut(); LINK_RING_SIZE], read: 0, write: 0 }
+    Link { packets: [std::ptr::null_mut(); LINK_RING_SIZE],
+           read: 0, write: 0,
+           txpackets: 0, txbytes: 0, txdrop: 0,
+           rxpackets: 0, rxbytes: 0 }
 }
 
 pub fn empty(r: &Link) -> bool { r.read == r.write }
@@ -47,13 +53,18 @@ pub fn receive(r: &mut Link) -> Box<packet::Packet> {
     if empty(r) { panic!("Link underflow."); }
     let p = unsafe { Box::from_raw(r.packets[r.read as usize]) };
     r.read = (r.read + 1) & (SIZE - 1);
+    r.rxpackets += 1;
+    r.rxbytes += p.length as u64;
     p
 }
 
 pub fn transmit(r: &mut Link, mut p: Box<packet::Packet>) {
     if full(r) {
+        r.txdrop += 1;
         packet::free(p);
     } else {
+        r.txpackets += 1;
+        r.txbytes += p.length as u64;
         r.packets[r.write as usize] = &mut *p; std::mem::forget(p);
         r.write = (r.write + 1) & (SIZE - 1);
     }
