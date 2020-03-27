@@ -1,5 +1,7 @@
 use super::engine;
 
+use std::cmp::max;
+
 // PACKET STRUCT AND FREELIST
 //
 // This module defines a struct to represent packets of network data, and
@@ -98,7 +100,7 @@ pub fn free (p: Box<Packet>) {
     engine::add_freebytes(p.length as u64);
     // Calculate bits of physical capacity required for packet on 10GbE
     // Account for minimum data size and overhead of CRC and inter-packet gap
-    engine::add_freebits(((std::cmp::max(p.length, 46) + 4 + 5) * 8) as u64);
+    engine::add_freebits((max(p.length as u64, 46) + 4 + 5) * 8);
     free_internal(p);
 }
 
