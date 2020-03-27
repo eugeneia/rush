@@ -93,7 +93,7 @@ fn free_internal(mut p: Box<Packet>) {
     unsafe { FL.list[FL.nfree] = &mut *p; } std::mem::forget(p);
     unsafe { FL.nfree += 1; }
 }
-pub fn free (mut p: Box<Packet>) {
+pub fn free (p: Box<Packet>) {
     engine::add_frees();
     engine::add_freebytes(p.length as u64);
     // Calculate bits of physical capacity required for packet on 10GbE
