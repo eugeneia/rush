@@ -1,4 +1,5 @@
 use super::engine;
+use super::lib;
 
 use std::cmp::max;
 
@@ -102,6 +103,14 @@ pub fn free (p: Box<Packet>) {
     // Account for minimum data size and overhead of CRC and inter-packet gap
     engine::add_freebits((max(p.length as u64, 46) + 4 + 5) * 8);
     free_internal(p);
+}
+
+// Clone a packet
+pub fn clone (p: &Box<Packet>) -> Box<Packet> {
+    let mut copy = allocate();
+    lib::copy(&mut copy.data, &p.data, p.length as usize);
+    copy.length = p.length;
+    copy
 }
 
 // pub fn debug() {

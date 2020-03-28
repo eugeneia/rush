@@ -2,6 +2,7 @@ mod packet;
 mod link;
 mod engine;
 mod config;
+mod lib;
 mod basic_apps;
 
 fn main() {

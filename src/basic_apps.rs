@@ -1,6 +1,7 @@
 use super::packet;
 use super::link;
 use super::engine;
+use super::lib;
 
 // Source app: generate synthetic packets
 
@@ -18,6 +19,7 @@ impl engine::App for SourceApp {
             let mut output = output.borrow_mut();
             for _ in 0..engine::PULL_NPACKETS {
                 let mut p = packet::allocate();
+                lib::fill(&mut p.data, self.size as usize, 0);
                 p.length = self.size;
                 link::transmit(&mut output, p);
             }
@@ -41,6 +43,36 @@ impl engine::App for SinkApp {
             let mut input = input.borrow_mut();
             while !link::empty(&input) {
                 packet::free(link::receive(&mut input));
+            }
+        }
+    }
+}
+
+// Tee app: Send inputs to all outputs
+
+#[derive(Debug)]
+pub struct Tee {}
+impl engine::AppConfig for Tee {
+    fn new(&self) -> Box<dyn engine::App> {
+        Box::new(TeeApp {})
+    }
+}
+pub struct TeeApp {}
+impl engine::App for TeeApp {
+    fn push(&self, app: &engine::AppState) {
+        //let noutputs = app.output.len();
+        for input in app.input.values() {
+            let mut input = input.borrow_mut();
+            while !link::empty(&input) {
+                let p = link::receive(&mut input);
+                //let mut outn = 0;
+                for output in app.output.values() {
+                    let mut output = output.borrow_mut();
+                    //outn += 1;
+                    link::transmit(&mut output, packet::clone(&p));
+                    //if outn == noutputs { packet::clone(&p) } else { p }
+                }
+                packet::free(p);
             }
         }
     }
