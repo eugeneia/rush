@@ -75,6 +75,6 @@ pub fn transmit(r: &mut Link, mut p: Box<packet::Packet>) {
 // NB: a non-empty Link going out of scope will trigger a panic.
 impl Drop for Link {
     fn drop(&mut self) {
-        if !empty(self) { panic!("Link is not empty."); }
+        while !empty(self) { packet::free(receive(self)); }
     }
 }
