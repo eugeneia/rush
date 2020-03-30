@@ -5,12 +5,17 @@ mod config;
 mod lib;
 mod basic_apps;
 
+use std::time::{Duration,Instant};
+
 fn main() {
     init();
     allocate();
     link();
     config();
-    engine();
+    let mut s = engine::init();
+    println!("Initialized engine");
+    engine(&mut s);
+    basic1(&mut s, 10_000_000);
 }
 
 fn init() {
@@ -71,33 +76,54 @@ fn config () {
     println!("Added an link");
 }
 
-fn engine() {
-    let mut s = engine::init();
-    println!("Initialized engine");
+fn engine(s: &mut engine::EngineState) {
     let mut c = config::new();
     config::app(&mut c, "source", &basic_apps::Source {size: 60});
     config::app(&mut c, "sink", &basic_apps::Sink {});
     config::link(&mut c, "source.output -> sink.input");
-    engine::configure(&mut s, &c);
+    engine::configure(s, &c);
     println!("Configured the app network: source(60).output -> sink.input");
-    engine::breathe(&s);
-    println!("Performed a single breath");
-    { let output =
-          s.link_table.get("source.output -> sink.input").unwrap().borrow();
-      println!("link: rxpackets={} rxbytes={} txdrop={}",
-               output.rxpackets, output.rxbytes, output.txdrop); }
+    engine::main(&s, Some(engine::Options{
+        duration: Some(Duration::new(0,0)),
+        report_load: true, report_links: true,
+        ..Default::default()
+    }));
     let mut c = c.clone();
     config::app(&mut c, "source", &basic_apps::Source {size: 120});
-    engine::configure(&mut s, &c);
+    engine::configure(s, &c);
     println!("Cloned, mutated, and applied new configuration:");
     println!("source(120).output -> sink.input");
-    engine::breathe(&s);
-    println!("Performed a single breath");
-    { let output =
-          s.link_table.get("source.output -> sink.input").unwrap().borrow();
-      println!("link: rxpackets={} rxbytes={} txdrop={}",
-               output.rxpackets, output.rxbytes, output.txdrop); }
+    engine::main(&s, Some(engine::Options{
+        done: Some(Box::new(|_, _| true)),
+        report_load: true, report_links: true,
+        ..Default::default()
+    }));
     let stats = engine::stats();
     println!("engine: frees={} freebytes={} freebits={}",
              stats.frees, stats.freebytes, stats.freebits);
+}
+
+fn basic1 (s: &mut engine::EngineState, npackets: u64) {
+    let mut c = config::new();
+    config::app(&mut c, "Source", &basic_apps::Source {size: 60});
+    config::app(&mut c, "Tee", &basic_apps::Tee {});
+    config::app(&mut c, "Sink", &basic_apps::Sink {});
+    config::link(&mut c, "Source.tx -> Tee.rx");
+    config::link(&mut c, "Tee.tx1 -> Sink.rx1");
+    config::link(&mut c, "Tee.tx2 -> Sink.rx2");
+    engine::configure(s, &c);
+    let start = Instant::now();
+    let output = s.app_table.get("Source").unwrap().output.get("tx").unwrap();
+    while output.borrow().txpackets < npackets {
+        engine::main(&s, Some(engine::Options{
+            duration: Some(Duration::new(0, 10_000_000)), // 0.01s
+            no_report: true,
+            ..Default::default()
+        }));
+    }
+    let finish = Instant::now();
+    let runtime = finish.duration_since(start).as_secs_f64();
+    let packets = output.borrow().txpackets as f64;
+    println!("Processed {:.1} million packets in {:.2} seconds (rate: {:.1} Mpps).",
+             packets / 1e6, runtime, packets / runtime / 1e6);
 }
