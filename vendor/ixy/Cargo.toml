@@ -1,0 +1,13 @@
+[package]
+name = "ixy"
+version = "0.1.0"
+authors = ["Simon Ellmann <simon.ellmann@tum.de>"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2"
+byteorder = "1"
+log = "0.4"
+
+[dev-dependencies]
+simple_logger = "1"
