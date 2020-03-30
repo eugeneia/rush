@@ -6,7 +6,7 @@
 //   Config - inspectable, cloneable configuration structure
 //   new() -> Config - Create a new empty configuration
 //   app(&mut Config, name:&str, &AppConfig) - Add an app to a configuration
-//   link(&mut Config, linkspec:&str) - Add a a link to a configuration
+//   link(&mut Config, linkspec:&str) - Add a link to a configuration
 
 use super::engine;
 
@@ -36,7 +36,7 @@ pub fn new<'conf>() -> Config<'conf> {
 //
 // Example: config::app(&mut c, "source", &basic_apps::Source {size: 60})
 pub fn app<'conf>(config: &mut Config<'conf>,
-               name: &str, app: &'conf dyn engine::AppArg) {
+                  name: &str, app: &'conf dyn engine::AppArg) {
     config.apps.insert(name.to_string(), app);
 }
 
