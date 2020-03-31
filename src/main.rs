@@ -1,3 +1,4 @@
+mod memory;
 mod packet;
 mod link;
 mod engine;
@@ -8,7 +9,6 @@ mod basic_apps;
 use std::time::{Duration,Instant};
 
 fn main() {
-    init();
     allocate();
     link();
     config();
@@ -17,11 +17,6 @@ fn main() {
     engine(&mut s);
     breathe_order(&mut s);
     basic1(&mut s, 10_000_000);
-}
-
-fn init() {
-    packet::init();
-    println!("Initialized packet freelist");
 }
 
 fn allocate() {

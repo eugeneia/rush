@@ -13,3 +13,12 @@ pub fn copy(dst: &mut [u8], src: &[u8], len: usize) {
                   cmp::min(len, cmp::min(src.len(), dst.len())));
     }
 }
+
+// Increase value to be a multiple of size (if it is not already).
+pub fn align(value: usize, size: usize) -> usize {
+   if value % size == 0 {
+       value
+   } else {
+       value + size - (value % size)
+   }
+}

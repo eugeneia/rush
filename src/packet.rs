@@ -1,7 +1,9 @@
 use super::engine;
+use super::memory;
 use super::lib;
 
-use std::cmp::max;
+use std::cmp;
+use std::mem;
 
 // PACKET STRUCT AND FREELIST
 //
@@ -32,42 +34,45 @@ impl Drop for Packet { fn drop(&mut self) { panic!("Packet leaked"); } }
 
 // Allocate a packet struct on the heap (initialized all-zero).
 // NB: Box is how we heap-allocate in Rust.
-// XXX - This is a stub. Eventually packets may need to be allocated in DMA
-// pages, and follow strict alignment invariants.
 fn new_packet() -> Box<Packet> {
-    Box::new(Packet { length: 0, data: [0; PAYLOAD_SIZE] })
+    let base = memory::dma_alloc(mem::size_of::<Packet>(),
+                                 mem::align_of::<Packet>());
+    let mut p = unsafe { Box::from_raw(base as *mut Packet) };
+    p.length = 0;
+    p
 }
 
-// Number of packets initially on the freelist.
-const FREELIST_SIZE: usize = 100_000;
+// Maximum number of packets on the freelist.
+const MAX_PACKETS: usize = 1_000_000;
 
 // Freelist consists of an array of mutable raw pointers to Packet,
 // and a fill counter.
 struct Freelist {
-    list: [*mut Packet; FREELIST_SIZE],
+    list: [*mut Packet; MAX_PACKETS],
     nfree: usize
 }
 
 // FL: global freelist (initially empty, populated with null ptrs).
 static mut FL: Freelist = Freelist {
-    list: [std::ptr::null_mut(); FREELIST_SIZE],
+    list: [std::ptr::null_mut(); MAX_PACKETS],
     nfree: 0
 };
 
 // Fill up FL with freshly allocated packets.
 // NB: using FL is unsafe because it is a mutable static (we have to ensure
 // thread safety).
-// NB: we can cast a mutable reference of the boxed packet (&mut *p) to a raw
-// pointer.
-// NB: we std::mem::forget the Box p before it exits scope to avoid the heap
-// allocated packet from being Dropped (i.e., we intentionally leak
-// FREELIST_SIZE packets onto the static FL).
-// XXX - eventually, new memory needs to be allocated on-demand dynamically.
-pub fn init() {
-    while unsafe { FL.nfree < FREELIST_SIZE } {
-        let mut p = new_packet();
-        unsafe { FL.list[FL.nfree] = &mut *p; } std::mem::forget(p);
-        unsafe { FL.nfree += 1; }
+static mut PACKETS_ALLOCATED: usize = 0;
+static mut PACKET_ALLOCATION_STEP: usize = 1000;
+fn preallocate_step () {
+    unsafe {
+        assert!(PACKETS_ALLOCATED + PACKET_ALLOCATION_STEP <= MAX_PACKETS,
+                "Packet allocation overflow");
+
+        for _ in 0..PACKET_ALLOCATION_STEP {
+            free_internal(new_packet());
+        }
+        PACKETS_ALLOCATED += PACKET_ALLOCATION_STEP;
+        PACKET_ALLOCATION_STEP *= 2;
     }
 }
 
@@ -76,7 +81,9 @@ pub fn init() {
 // the static FL. We can also be sure that the Box does not alias another
 // packet (see free).
 pub fn allocate() -> Box<Packet> {
-    if unsafe { FL.nfree == 0 } { panic!("Packet freelist underflow"); }
+    if unsafe { FL.nfree == 0 } {
+        preallocate_step();
+    }
     unsafe { FL.nfree -= 1; }
     unsafe { Box::from_raw(FL.list[FL.nfree]) }
 }
@@ -86,14 +93,17 @@ pub fn allocate() -> Box<Packet> {
 // effectively consumes the Box. Once a packet is freed it can no longer be
 // referenced, and hence can not me mutated once it has been returned to the
 // freelist.
+// NB: we can cast a mutable reference of the boxed packet (&mut *p) to a raw
+// pointer.
 // NB: we std::mem::forget the Box p to inhibit Dropping of the packet once it
-// is on the freelist. If a packet goes out of scope without being freed, the
+// is on the freelist. (I.e., we intentionally leak up to MAX_PACKETS packets
+// onto the static FL.) If a packet goes out of scope without being freed, the
 // attempt to Drop it will trigger a panic (see Packet). Hence we ensure that
 // all allocated packets are eventually freed.
 fn free_internal(mut p: Box<Packet>) {
-    if unsafe { FL.nfree } == FREELIST_SIZE { panic!("Packet freelist overflow"); }
+    if unsafe { FL.nfree } == MAX_PACKETS { panic!("Packet freelist overflow"); }
     p.length = 0;
-    unsafe { FL.list[FL.nfree] = &mut *p; } std::mem::forget(p);
+    unsafe { FL.list[FL.nfree] = &mut *p; } mem::forget(p);
     unsafe { FL.nfree += 1; }
 }
 pub fn free (p: Box<Packet>) {
@@ -101,7 +111,7 @@ pub fn free (p: Box<Packet>) {
     engine::add_freebytes(p.length as u64);
     // Calculate bits of physical capacity required for packet on 10GbE
     // Account for minimum data size and overhead of CRC and inter-packet gap
-    engine::add_freebits((max(p.length as u64, 46) + 4 + 5) * 8);
+    engine::add_freebits((cmp::max(p.length as u64, 46) + 4 + 5) * 8);
     free_internal(p);
 }
 
