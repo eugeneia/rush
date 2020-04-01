@@ -72,6 +72,7 @@ pub fn pci_open_resource(pci_addr: &str, resource: &str) -> Result<File, Box<dyn
 }
 
 /// Reads and returns an u8 at `offset` in `file`.
+#[allow(dead_code)]
 pub fn read_io8(file: &mut File, offset: u64) -> Result<u8, io::Error> {
     file.seek(SeekFrom::Start(offset))?;
     file.read_u8()
@@ -90,6 +91,7 @@ pub fn read_io32(file: &mut File, offset: u64) -> Result<u32, io::Error> {
 }
 
 /// Writes an u8 at `offset` in `file`.
+#[allow(dead_code)]
 pub fn write_io8(file: &mut File, value: u8, offset: u64) -> Result<(), io::Error> {
     file.seek(SeekFrom::Start(offset))?;
     file.write_u8(value)
@@ -102,6 +104,7 @@ pub fn write_io16(file: &mut File, value: u16, offset: u64) -> Result<(), io::Er
 }
 
 /// Writes an u32 at `offset` in `file`.
+#[allow(dead_code)]
 pub fn write_io32(file: &mut File, value: u32, offset: u64) -> Result<(), io::Error> {
     file.seek(SeekFrom::Start(offset))?;
     file.write_u32::<NativeEndian>(value)

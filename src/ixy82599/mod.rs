@@ -6,27 +6,28 @@
 
 #![warn(rust_2018_idioms)]
 
-#[macro_use]
-extern crate log;
+use crate::link;
+
+// #[macro_use]
+// extern crate log;
 
 #[rustfmt::skip]
 mod constants;
-mod interrupts;
+// mod interrupts;
 mod ixgbe;
-pub mod memory;
+// pub mod memory;
 mod pci;
-mod vfio;
-mod virtio;
-#[rustfmt::skip]
-mod virtio_constants;
+// mod vfio;
+// mod virtio;
+// #[rustfmt::skip]
+// mod virtio_constants;
 
-use self::interrupts::*;
+// use self::interrupts::*;
 use self::ixgbe::*;
-use self::memory::*;
+// use self::memory::*;
 use self::pci::*;
-use self::virtio::VirtioDevice;
+// use self::virtio::VirtioDevice;
 
-use std::collections::VecDeque;
 use std::error::Error;
 use std::os::unix::io::RawFd;
 
@@ -80,7 +81,7 @@ pub trait IxyDevice {
     fn rx_batch(
         &mut self,
         queue_id: u32,
-        buffer: &mut VecDeque<Packet>,
+        output: &mut link::Link,
         num_packets: usize,
     ) -> usize;
 
@@ -99,7 +100,7 @@ pub trait IxyDevice {
     ///
     /// assert_eq!(dev.tx_batch(0, &mut buf), 0);
     /// ```
-    fn tx_batch(&mut self, queue_id: u32, buffer: &mut VecDeque<Packet>) -> usize;
+    fn tx_batch(&mut self, queue_id: u32, input: &mut link::Link) -> usize;
 
     /// Reads the network card's stats registers into `stats`.
     ///
@@ -141,9 +142,9 @@ pub trait IxyDevice {
 
     /// Takes `Packet`s out of `buffer` to send out. This will busy wait until all packets from
     /// `buffer` are queued.
-    fn tx_batch_busy_wait(&mut self, queue_id: u32, buffer: &mut VecDeque<Packet>) {
-        while !buffer.is_empty() {
-            self.tx_batch(queue_id, buffer);
+    fn tx_batch_busy_wait(&mut self, queue_id: u32, input: &mut link::Link) {
+        while !link::empty(input) {
+            self.tx_batch(queue_id, input);
         }
     }
 }
@@ -159,6 +160,7 @@ pub struct DeviceStats {
 
 impl DeviceStats {
     ///  Prints the stats differences between `stats_old` and `self`.
+    #[allow(dead_code)]
     pub fn print_stats_diff(&self, dev: &dyn IxyDevice, stats_old: &DeviceStats, nanos: u64) {
         let pci_addr = dev.get_pci_addr();
         let mbits = self.diff_mbit(
@@ -224,8 +226,9 @@ pub fn ixy_init(
 
     if vendor_id == 0x1af4 && device_id == 0x1000 {
         // `device_id == 0x1041` would be for non-transitional devices which we don't support atm
-        let device = VirtioDevice::init(pci_addr, rx_queues, tx_queues, interrupt_timeout)?;
-        Ok(Box::new(device))
+        // let device = VirtioDevice::init(pci_addr, rx_queues, tx_queues, interrupt_timeout)?;
+        // Ok(Box::new(device))
+        Err("Virtio not supported".into())
     } else {
         // let's give it a try with ixgbe
         let device = IxgbeDevice::init(pci_addr, rx_queues, tx_queues, interrupt_timeout)?;
@@ -270,14 +273,14 @@ impl IxyDevice for Box<dyn IxyDevice> {
     fn rx_batch(
         &mut self,
         queue_id: u32,
-        buffer: &mut VecDeque<Packet>,
+        output: &mut link::Link,
         num_packets: usize,
     ) -> usize {
-        (**self).rx_batch(queue_id, buffer, num_packets)
+        (**self).rx_batch(queue_id, output, num_packets)
     }
 
-    fn tx_batch(&mut self, queue_id: u32, buffer: &mut VecDeque<Packet>) -> usize {
-        (**self).tx_batch(queue_id, buffer)
+    fn tx_batch(&mut self, queue_id: u32, input: &mut link::Link) -> usize {
+        (**self).tx_batch(queue_id, input)
     }
 
     fn read_stats(&self, stats: &mut DeviceStats) {

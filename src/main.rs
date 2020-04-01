@@ -7,6 +7,8 @@ mod engine;
 mod config;
 mod lib;
 mod basic_apps;
+mod ixy82599;
+mod ixy82599_app;
 
 fn main() {
     println!("This could be the beginning of a beautiful network function...");
