@@ -15,6 +15,7 @@ fn main() {
     let mut s = engine::init();
     println!("Initialized engine");
     engine(&mut s);
+    breathe_order(&mut s);
     basic1(&mut s, 10_000_000);
 }
 
@@ -101,6 +102,51 @@ fn engine(s: &mut engine::EngineState) {
     let stats = engine::stats();
     println!("engine: frees={} freebytes={} freebits={}",
              stats.frees, stats.freebytes, stats.freebits);
+}
+
+fn breathe_order(s: &mut engine::EngineState) {
+    println!("Case 1:");
+    let mut c = config::new();
+    config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
+    config::app(&mut c, "b_t1", &basic_apps::Tee {});
+    config::app(&mut c, "c_t2", &basic_apps::Tee {});
+    config::app(&mut c, "d_t3", &basic_apps::Tee {});
+    config::link(&mut c, "a_io1.output -> b_t1.input");
+    config::link(&mut c, "b_t1.output -> c_t2.input");
+    config::link(&mut c, "b_t1.output2 -> d_t3.input");
+    config::link(&mut c, "d_t3.output -> b_t1.input2");
+    engine::configure(s, &c);
+    engine::report_links(s);
+    for name in &s.inhale { println!("pull {}", &name); }
+    for name in &s.exhale { println!("push {}", &name); }
+    println!("Case 2:");
+    let mut c = config::new();
+    config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
+    config::app(&mut c, "b_t1", &basic_apps::Tee {});
+    config::app(&mut c, "c_t2", &basic_apps::Tee {});
+    config::app(&mut c, "d_t3", &basic_apps::Tee {});
+    config::link(&mut c, "a_io1.output -> b_t1.input");
+    config::link(&mut c, "b_t1.output -> c_t2.input");
+    config::link(&mut c, "b_t1.output2 -> d_t3.input");
+    config::link(&mut c, "c_t2.output -> d_t3.input2");
+    engine::configure(s, &c);
+    engine::report_links(s);
+    for name in &s.inhale { println!("pull {}", &name); }
+    for name in &s.exhale { println!("push {}", &name); }
+    println!("Case 3:");
+    let mut c = config::new();
+    config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
+    config::app(&mut c, "b_t1", &basic_apps::Tee {});
+    config::app(&mut c, "c_t2", &basic_apps::Tee {});
+    config::link(&mut c, "a_io1.output -> b_t1.input");
+    config::link(&mut c, "a_io1.output2 -> c_t2.input");
+    config::link(&mut c, "b_t1.output -> a_io1.input");
+    config::link(&mut c, "b_t1.output2 -> c_t2.input2");
+    config::link(&mut c, "c_t2.output -> a_io1.input2");
+    engine::configure(s, &c);
+    engine::report_links(s);
+    for name in &s.inhale { println!("pull {}", &name); }
+    for name in &s.exhale { println!("push {}", &name); }
 }
 
 fn basic1 (s: &mut engine::EngineState, npackets: u64) {

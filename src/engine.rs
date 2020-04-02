@@ -23,6 +23,7 @@ use super::link;
 use super::config;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -49,7 +50,9 @@ pub fn stats() -> &'static EngineStats { unsafe { &STATS } }
 // The set of all active apps and links in the system, indexed by name.
 pub struct EngineState<'state> {
     pub link_table: HashMap<String, SharedLink>,
-    pub app_table: HashMap<String, AppState<'state>>
+    pub app_table: HashMap<String, AppState<'state>>,
+    pub inhale: Vec<String>,
+    pub exhale: Vec<String>
 }
 static mut INIT: bool = false;
 pub fn init<'state>() -> EngineState<'state> {
@@ -57,7 +60,9 @@ pub fn init<'state>() -> EngineState<'state> {
     unsafe { INIT = true; }
     EngineState {
         app_table: HashMap::new(),
-        link_table: HashMap::new()
+        link_table: HashMap::new(),
+        inhale: Vec::new(),
+        exhale: Vec::new()
     }
 }
 
@@ -85,9 +90,12 @@ pub struct AppState<'state> {
 //         to output links, or peripheral device queues)
 //   stop: stop the app (deinitialize)
 pub trait App {
-    fn pull(&self, _app: &AppState) {}
-    fn push(&self, _app: &AppState) {} // Exhale packets from apps.input
-    fn stop(&self) {}
+    fn has_pull(&self) -> bool { false }
+    fn pull(&self, _app: &AppState) { panic!("Pull called but not implemented"); }
+    fn has_push(&self) -> bool { false }
+    fn push(&self, _app: &AppState) { panic!("Push called but not implemented"); }
+    fn has_stop(&self) -> bool { false }
+    fn stop(&self) { panic!("Stop called but not implemented"); }
 }
 // Recommended number of packets to inhale in pull()
 pub const PULL_NPACKETS: usize = link::LINK_MAX_PACKETS / 10;
@@ -144,6 +152,8 @@ pub fn configure<'state>(state: &mut EngineState<'state>,
     for link in config.links.iter() {
         link_apps(state, link);
     }
+    // Compute breathe order.
+    compute_breathe_order(state);
 }
 
 // Insert new app instance into network.
@@ -158,7 +168,8 @@ fn start_app<'state>(state: &mut EngineState<'state>,
 
 // Remove app instance from network.
 fn stop_app (state: &mut EngineState, name: &str) {
-    state.app_table.remove(name).unwrap().app.stop();
+    let removed = state.app_table.remove(name).unwrap();
+    if removed.app.has_stop() { removed.app.stop(); }
 }
 
 // Allocate a fresh shared link.
@@ -183,6 +194,87 @@ fn unlink_apps(state: &mut EngineState, spec: &str) {
         .output.remove(&spec.output);
     state.app_table.get_mut(&spec.to).unwrap()
         .input.remove(&spec.input);
+}
+
+// Compute engine breathe order
+//
+// Ensures that the order in which pull/push callbacks are processed in
+// breathe()...
+//   - follows link dependencies when possible (to optimize for latency)
+//   - executes each app’s callbacks at most once (cycles imply that some
+//     packets may remain on links after breathe() returns)
+//   - is deterministic with regard to the configuration
+fn compute_breathe_order(state: &mut EngineState) {
+    state.inhale.clear();
+    state.exhale.clear();
+    // Build map of successors
+    let mut successors: HashMap<String, HashSet<String>> = HashMap::new();
+    for link in state.link_table.keys() {
+        let spec = config::parse_link(&link);
+        successors.entry(spec.from).or_insert(HashSet::new()).insert(spec.to);
+    }
+    // Put pull apps in inhalers
+    for (name, app) in state.app_table.iter() {
+        if app.app.has_pull() {
+            state.inhale.push(name.to_string());
+        }
+    }
+    // Sort inhalers by name (to ensure breathe order determinism)
+    state.inhale.sort();
+    // Collect initial dependents
+    let mut dependents = Vec::new();
+    for name in &state.inhale {
+        if let Some(successors) = successors.get(name) {
+            for successor in successors.iter() {
+                let app = state.app_table.get(successor).unwrap();
+                if app.app.has_push() && !dependents.contains(successor) {
+                    dependents.push(successor.to_string());
+                }
+            }
+        }
+    }
+    // Remove processed successors (resolved dependencies)
+    for name in &state.inhale { successors.remove(name); }
+    // Compute sorted push order
+    while dependents.len() > 0 {
+        // Attempt to delay dependents after their inputs, but break cycles by
+        // selecting at least one dependent.
+        let mut selected = HashSet::new();
+        for name in dependents.clone() {
+            if let Some(successors) = successors.get(&name) {
+                for successor in successors.iter() {
+                    if !selected.contains(successor) &&
+                        dependents.contains(successor) &&
+                        dependents.len() > 1
+                    {
+                        selected.insert(name.to_string());
+                        dependents.retain(|name| name != successor);
+                    }
+                }
+            }
+        }
+        // Sort dependents by name (to ensure breathe order determinism)
+        dependents.sort();
+        // Drain and append dependents to exhalers
+        let exhaled = dependents.clone();
+        state.exhale.append(&mut dependents);
+        // Collect further dependents
+        for name in &exhaled {
+            if let Some(successors) = successors.get(name) {
+                for successor in successors.iter() {
+                    let app = state.app_table.get(successor).unwrap();
+                    if app.app.has_push() && 
+                        !state.exhale.contains(successor) && 
+                        !dependents.contains(successor)
+                    {
+                        dependents.push(successor.to_string());
+                    }
+                }
+            }
+        }
+        // Remove processed successors (resolved dependencies)
+        for name in &exhaled { successors.remove(name); }
+    }
 }
 
 // Call this to “run snabb”.
@@ -251,10 +343,12 @@ pub fn timeout(duration: Duration) -> Box<dyn Fn() -> bool> {
 // Perform a single breath (inhale / exhale)
 fn breathe(state: &EngineState) {
     unsafe { MONOTONIC_NOW = Some(Instant::now()); }
-    for app in state.app_table.values() {
+    for name in &state.inhale {
+        let app = state.app_table.get(name).unwrap();
         app.app.pull(&app);
     }
-    for app in state.app_table.values() {
+    for name in &state.exhale {
+        let app = state.app_table.get(name).unwrap();
         app.app.push(&app);
     }
     unsafe { STATS.breaths += 1; }
