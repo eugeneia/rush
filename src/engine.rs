@@ -200,9 +200,12 @@ pub fn main(state: &EngineState, options: Option<Options>) {
     }
 
     breathe(state);
-    while if let Some(done)=&done {!done(state, unsafe {&STATS})} else {true} {
-        breathe(state);
+    while match &done {
+        Some(done) => !done(state, unsafe {&STATS}),
+        None => true
+    } {
         pace_breathing();
+        breathe(state);
     }
     if !options.no_report {
         if options.report_load  { report_load(); }
