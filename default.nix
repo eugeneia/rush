@@ -8,7 +8,7 @@ with pkgs;
 
 stdenv.mkDerivation rec {
   name = "rush-${version}";
-  src = lib.cleanSource source;
+  #src = lib.cleanSource (lib.sourceByRegex source ["target/*"]);
 
   buildInputs = [ rustc cargo ];
   inherit version;
