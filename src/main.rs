@@ -14,7 +14,10 @@ fn main() {
     config();
     engine();
     breathe_order();
-    basic1(10_000_000);
+    basic1(match std::env::var("RUSH_BASIC1_NPACKETS") {
+        Ok(val) => val.parse::<f64>().unwrap() as u64,
+        _ => 1_000_000
+    });
 }
 
 fn allocate() {
