@@ -8,7 +8,7 @@ use super::lib;
 
 use std::ffi;
 use regex::Regex;
-use once_cell::sync::Lazy;
+use once_cell::unsync::Lazy;
 
 // Serve small allocations from hugepage "chunks"
 
