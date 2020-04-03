@@ -76,3 +76,20 @@ fn format_link(spec: &LinkSpec) -> String {
 fn canonical_link(spec: &str) -> String {
     format_link(&parse_link(spec))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::basic_apps;
+
+    #[test]
+    fn config () {
+        let mut c = new();
+        println!("Created an empty configuration");
+        app(&mut c, "source", &basic_apps::Source {size: 60});
+        println!("Added an app");
+        link(&mut c, "source.output -> sink.input");
+        println!("Added an link");
+    }
+
+}

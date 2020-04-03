@@ -13,6 +13,14 @@ stdenv.mkDerivation rec {
   buildInputs = [ rustc cargo ];
   inherit version;
 
+  preBuild = ''
+    export RUST_TEST_THREADS=1
+  '';
+
   # ...
+
+  shellHook = ''
+    runHook preBuild
+  '';
 
 }

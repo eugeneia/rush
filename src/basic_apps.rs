@@ -80,37 +80,3 @@ impl engine::App for TeeApp {
         }
     }
 }
-
-// SourceSink app: pseudo I/O device
-
-#[derive(Clone,Debug)]
-pub struct SourceSink { pub size: u16 }
-impl engine::AppConfig for SourceSink {
-    fn new(&self) -> Box<dyn engine::App> {
-        Box::new(SourceSinkApp {size: self.size})
-    }
-}
-pub struct SourceSinkApp { size: u16 }
-impl engine::App for SourceSinkApp {
-    fn has_pull(&self) -> bool { true }
-    fn pull(&self, app: &engine::AppState) {
-        for output in app.output.values() {
-            let mut output = output.borrow_mut();
-            for _ in 0..engine::PULL_NPACKETS {
-                let mut p = packet::allocate();
-                lib::fill(&mut p.data, self.size as usize, 0);
-                p.length = self.size;
-                link::transmit(&mut output, p);
-            }
-        }
-    }
-    fn has_push(&self) -> bool { true }
-    fn push(&self, app: &engine::AppState) {
-        for input in app.input.values() {
-            let mut input = input.borrow_mut();
-            while !link::empty(&input) {
-                packet::free(link::receive(&mut input));
-            }
-        }
-    }
-}

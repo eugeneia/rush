@@ -138,3 +138,24 @@ pub fn clone (p: &Box<Packet>) -> Box<Packet> {
 //                 FL.list[FL.nfree-1].as_mut().unwrap().data[0]);
 //    }
 // }
+
+#[cfg(test)]
+mod selftest {
+    use super::*;
+
+    #[test]
+    fn alloc() {
+        let mut p = allocate();
+        println!("Allocated a packet of length {}", p.length);
+        p.length = 1;
+        p.data[0] = 42;
+        //p.data[100000] = 99; // Would cause compile error
+        println!("Mutating packet (length = {}, data[0] = {})",
+                 p.length, p.data[0]);
+        let len = p.length;
+        free(p); // Not freeing would cause panic
+        println!("Freed a packet of length {}", len);
+        //p.length = 2; // Would cause compile error
+    }
+
+}

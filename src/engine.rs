@@ -442,3 +442,96 @@ fn loss_rate(drop: u64, sent: u64) -> u64 {
     if sent == 0 { return 0; }
     drop * 100 / (drop + sent)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config;
+    use crate::basic_apps;
+
+    #[test]
+    fn engine() {
+        let mut c = config::new();
+        config::app(&mut c, "source", &basic_apps::Source {size: 60});
+        config::app(&mut c, "sink", &basic_apps::Sink {});
+        config::link(&mut c, "source.output -> sink.input");
+        configure(&c);
+        println!("Configured the app network: source(60).output -> sink.input");
+        main(Some(Options{
+            duration: Some(Duration::new(0,0)),
+            report_load: true, report_links: true,
+            ..Default::default()
+        }));
+        let mut c = c.clone();
+        config::app(&mut c, "source", &basic_apps::Source {size: 120});
+        configure(&c);
+        println!("Cloned, mutated, and applied new configuration:");
+        println!("source(120).output -> sink.input");
+        main(Some(Options{
+            done: Some(Box::new(|| true)),
+            report_load: true, report_links: true,
+            ..Default::default()
+        }));
+        let stats = stats();
+        println!("engine: frees={} freebytes={} freebits={}",
+                 stats.frees, stats.freebytes, stats.freebits);
+    }
+
+    #[test]
+    fn breathe_order() {
+        println!("Case 1:");
+        let mut c = config::new();
+        config::app(&mut c, "a_io1", &PseudoIO {});
+        config::app(&mut c, "b_t1", &basic_apps::Tee {});
+        config::app(&mut c, "c_t2", &basic_apps::Tee {});
+        config::app(&mut c, "d_t3", &basic_apps::Tee {});
+        config::link(&mut c, "a_io1.output -> b_t1.input");
+        config::link(&mut c, "b_t1.output -> c_t2.input");
+        config::link(&mut c, "b_t1.output2 -> d_t3.input");
+        config::link(&mut c, "d_t3.output -> b_t1.input2");
+        configure(&c);
+        report_links();
+        for name in &state().inhale { println!("pull {}", &name); }
+        for name in &state().exhale { println!("push {}", &name); }
+        println!("Case 2:");
+        let mut c = config::new();
+        config::app(&mut c, "a_io1", &PseudoIO {});
+        config::app(&mut c, "b_t1", &basic_apps::Tee {});
+        config::app(&mut c, "c_t2", &basic_apps::Tee {});
+        config::app(&mut c, "d_t3", &basic_apps::Tee {});
+        config::link(&mut c, "a_io1.output -> b_t1.input");
+        config::link(&mut c, "b_t1.output -> c_t2.input");
+        config::link(&mut c, "b_t1.output2 -> d_t3.input");
+        config::link(&mut c, "c_t2.output -> d_t3.input2");
+        configure(&c);
+        report_links();
+        for name in &state().inhale { println!("pull {}", &name); }
+        for name in &state().exhale { println!("push {}", &name); }
+        println!("Case 3:");
+        let mut c = config::new();
+        config::app(&mut c, "a_io1", &PseudoIO {});
+        config::app(&mut c, "b_t1", &basic_apps::Tee {});
+        config::app(&mut c, "c_t2", &basic_apps::Tee {});
+        config::link(&mut c, "a_io1.output -> b_t1.input");
+        config::link(&mut c, "a_io1.output2 -> c_t2.input");
+        config::link(&mut c, "b_t1.output -> a_io1.input");
+        config::link(&mut c, "b_t1.output2 -> c_t2.input2");
+        config::link(&mut c, "c_t2.output -> a_io1.input2");
+        configure(&c);
+        report_links();
+        for name in &state().inhale { println!("pull {}", &name); }
+        for name in &state().exhale { println!("push {}", &name); }
+    }
+
+    #[derive(Clone,Debug)]
+    pub struct PseudoIO {}
+    impl AppConfig for PseudoIO {
+        fn new(&self) -> Box<dyn App> { Box::new(PseudoIOApp {}) }
+    }
+    pub struct PseudoIOApp {}
+    impl App for PseudoIOApp {
+        fn has_pull(&self) -> bool { true }
+        fn has_push(&self) -> bool { true }
+    }
+
+}
