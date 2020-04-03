@@ -41,6 +41,9 @@ fn new_packet() -> Box<Packet> {
     p.length = 0;
     p
 }
+fn new_packet_noroot() -> Box<Packet> {
+    Box::new(Packet { length: 0, data: [0; PAYLOAD_SIZE] })
+}
 
 // Maximum number of packets on the freelist.
 const MAX_PACKETS: usize = 1_000_000;
@@ -61,9 +64,14 @@ static mut FL: Freelist = Freelist {
 // Fill up FL with freshly allocated packets.
 // NB: using FL is unsafe because it is a mutable static (we have to ensure
 // thread safety).
+// NB: use DMA allocator if run as root, regular heap allocator otherwise.
 static mut PACKETS_ALLOCATED: usize = 0;
 static mut PACKET_ALLOCATION_STEP: usize = 1000;
 fn preallocate_step () {
+    let new_packet = match unsafe { libc::getuid() } {
+        0 => new_packet,
+        _ => new_packet_noroot
+    };
     unsafe {
         assert!(PACKETS_ALLOCATED + PACKET_ALLOCATION_STEP <= MAX_PACKETS,
                 "Packet allocation overflow");
