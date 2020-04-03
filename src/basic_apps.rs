@@ -5,7 +5,7 @@ use super::lib;
 
 // Source app: generate synthetic packets
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Source { pub size: u16 }
 impl engine::AppConfig for Source {
     fn new(&self) -> Box<dyn engine::App> {
@@ -30,7 +30,7 @@ impl engine::App for SourceApp {
 
 // Sink app: Receive and discard packets
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Sink {}
 impl engine::AppConfig for Sink {
     fn new(&self) -> Box<dyn engine::App> {
@@ -52,7 +52,7 @@ impl engine::App for SinkApp {
 
 // Tee app: Send inputs to all outputs
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Tee {}
 impl engine::AppConfig for Tee {
     fn new(&self) -> Box<dyn engine::App> {
@@ -83,7 +83,7 @@ impl engine::App for TeeApp {
 
 // SourceSink app: pseudo I/O device
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct SourceSink { pub size: u16 }
 impl engine::AppConfig for SourceSink {
     fn new(&self) -> Box<dyn engine::App> {

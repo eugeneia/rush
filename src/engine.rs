@@ -29,6 +29,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 use std::thread::sleep;
 use std::cmp::min;
+use once_cell::unsync::Lazy;
 
 // Counters for global engine statistics.
 pub struct EngineStats {
@@ -48,23 +49,19 @@ pub fn stats() -> &'static EngineStats { unsafe { &STATS } }
 // Global engine state; singleton obtained via engine::init()
 //
 // The set of all active apps and links in the system, indexed by name.
-pub struct EngineState<'state> {
+pub struct EngineState {
     pub link_table: HashMap<String, SharedLink>,
-    pub app_table: HashMap<String, AppState<'state>>,
+    pub app_table: HashMap<String, AppState>,
     pub inhale: Vec<String>,
     pub exhale: Vec<String>
 }
-static mut INIT: bool = false;
-pub fn init<'state>() -> EngineState<'state> {
-    if unsafe { INIT } { panic!("Engine already initialized"); }
-    unsafe { INIT = true; }
-    EngineState {
-        app_table: HashMap::new(),
-        link_table: HashMap::new(),
-        inhale: Vec::new(),
-        exhale: Vec::new()
-    }
-}
+static mut STATE: Lazy<EngineState> = Lazy::new(
+    || EngineState { app_table: HashMap::new(),
+                     link_table: HashMap::new(),
+                     inhale: Vec::new(),
+                     exhale: Vec::new() }
+);
+pub fn state() -> &'static EngineState { unsafe { &STATE } }
 
 // Type for links shared between apps.
 //
@@ -76,9 +73,9 @@ pub type SharedLink = Rc<RefCell<link::Link>>;
 //
 // Tracks a reference to the AppConfig used to instantiate the app, and maps of
 // its active input and output links.
-pub struct AppState<'state> {
+pub struct AppState {
     pub app: Box<dyn App>,
-    pub conf: &'state dyn AppArg,
+    pub conf: Box<dyn AppArg>,
     pub input: HashMap<String, SharedLink>,
     pub output: HashMap<String, SharedLink>
 }
@@ -114,19 +111,33 @@ pub trait AppConfig: std::fmt::Debug {
 // implementors of AppConfig. Sort of a hack based on the Debug trait.
 //
 // Auto-implemented for all implementors of AppConfig.
-pub trait AppArg: AppConfig {
+pub trait AppArg: AppConfig + AppClone {
     fn identity(&self) -> String { format!("{}::{:?}", module_path!(), self) }
     fn equal(&self, y: &dyn AppArg) -> bool { self.identity() == y.identity() }
 }
-impl<T: AppConfig> AppArg for T { }
+impl<T: AppConfig + AppClone> AppArg for T { }
 
+// We need to be able to copy (clone) AppConfig objects from configurations
+// into the engine state. However, the Rust compiler does not allow
+// AppConfig/AppArg to implement Clone(/Sized) if we want to use them for trait
+// objects.
+//
+// The AppClone trait below (which we can bind AppArg to) auto-implements a
+// box_clone[1] method for all implementors of AppConfig as per
+// https://users.rust-lang.org/t/solved-is-it-possible-to-clone-a-boxed-trait-object/1714/6
+pub trait AppClone: AppConfig {
+    fn box_clone(&self) -> Box<dyn AppArg>;
+}
+impl<T: AppConfig + Clone + 'static> AppClone for T {
+    fn box_clone(&self) -> Box<dyn AppArg> { Box::new((*self).clone()) }
+}
 
 // Configure the running app network to match (new) config.
 //
 // Successive calls to configure() will migrate from the old to the
 // new app network by making the changes needed.
-pub fn configure<'state>(state: &mut EngineState<'state>,
-                         config: &config::Config<'state>) {
+pub fn configure(config: &config::Config) {
+    let state = unsafe { &mut STATE };
     // First determine the links that are going away and remove them.
     for link in state.link_table.clone().keys() {
         if config.links.get(link).is_none() {
@@ -136,7 +147,7 @@ pub fn configure<'state>(state: &mut EngineState<'state>,
     // Do the same for apps.
     let apps: Vec<_> = state.app_table.keys().map(Clone::clone).collect();
     for name in apps {
-        let old = state.app_table.get(&name).unwrap().conf;
+        let old = &state.app_table.get(&name).unwrap().conf;
         match config.apps.get(&name) {
             Some(new) => if !old.equal(*new) { stop_app(state, &name) },
             None => stop_app(state, &name)
@@ -157,8 +168,8 @@ pub fn configure<'state>(state: &mut EngineState<'state>,
 }
 
 // Insert new app instance into network.
-fn start_app<'state>(state: &mut EngineState<'state>,
-                     name: &str, conf: &'state dyn AppArg) {
+fn start_app(state: &mut EngineState, name: &str, conf: &dyn AppArg) {
+    let conf = conf.box_clone();
     state.app_table.insert(name.to_string(),
                            AppState { app: conf.new(),
                                       conf: conf,
@@ -278,30 +289,25 @@ fn compute_breathe_order(state: &mut EngineState) {
 }
 
 // Call this to “run snabb”.
-pub fn main(state: &EngineState, options: Option<Options>) {
+pub fn main(options: Option<Options>) {
     let options = match options {
         Some(options) => options,
         None => Options{..Default::default()}
     };
-    let mut done: Option<Box<dyn Fn(&EngineState, &EngineStats) -> bool>> =
-        options.done;
+    let mut done = options.done;
     if let Some(duration) = options.duration {
         if done.is_some() { panic!("You can not have both 'duration' and 'done'"); }
-        let deadline = timeout(duration);
-        done = Some(Box::new(move |_, _| deadline()));
+        done = Some(timeout(duration));
     }
 
-    breathe(state);
-    while match &done {
-        Some(done) => !done(state, unsafe {&STATS}),
-        None => true
-    } {
+    breathe();
+    while match &done { Some(done) => !done(), None => true } {
         pace_breathing();
-        breathe(state);
+        breathe();
     }
     if !options.no_report {
         if options.report_load  { report_load(); }
-        if options.report_links { report_links(state); }
+        if options.report_links { report_links(); }
     }
 
     unsafe { MONOTONIC_NOW = None; }
@@ -316,7 +322,7 @@ pub fn main(state: &EngineState, options: Option<Options>) {
 //  report_links: print summarized statistics for each link upon return
 #[derive(Default)]
 pub struct Options {
-    pub done: Option<Box<dyn Fn(&EngineState, &EngineStats) -> bool>>,
+    pub done: Option<Box<dyn Fn() -> bool>>,
     pub duration: Option<Duration>,
     pub no_report: bool,
     pub report_load: bool,
@@ -341,14 +347,14 @@ pub fn timeout(duration: Duration) -> Box<dyn Fn() -> bool> {
 }
 
 // Perform a single breath (inhale / exhale)
-fn breathe(state: &EngineState) {
+fn breathe() {
     unsafe { MONOTONIC_NOW = Some(Instant::now()); }
-    for name in &state.inhale {
-        let app = state.app_table.get(name).unwrap();
+    for name in &state().inhale {
+        let app = state().app_table.get(name).unwrap();
         app.app.pull(&app);
     }
-    for name in &state.exhale {
-        let app = state.app_table.get(name).unwrap();
+    for name in &state().exhale {
+        let app = state().app_table.get(name).unwrap();
         app.app.push(&app);
     }
     unsafe { STATS.breaths += 1; }
@@ -420,11 +426,11 @@ pub fn report_load() {
 }
 
 // Print a link report (packets sent, percent dropped)
-pub fn report_links(state: &EngineState) {
-    let mut names: Vec<_> = state.link_table.keys().collect();
+pub fn report_links() {
+    let mut names: Vec<_> = state().link_table.keys().collect();
     names.sort();
     for name in names {
-        let link = state.link_table.get(name).unwrap().borrow();
+        let link = state().link_table.get(name).unwrap().borrow();
         let txpackets = link.txpackets;
         let txdrop = link.txdrop;
         println!("{} sent on {} (loss rate: {}%)",

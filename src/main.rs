@@ -12,11 +12,9 @@ fn main() {
     allocate();
     link();
     config();
-    let mut s = engine::init();
-    println!("Initialized engine");
-    engine(&mut s);
-    breathe_order(&mut s);
-    basic1(&mut s, 10_000_000);
+    engine();
+    breathe_order();
+    basic1(10_000_000);
 }
 
 fn allocate() {
@@ -72,25 +70,25 @@ fn config () {
     println!("Added an link");
 }
 
-fn engine(s: &mut engine::EngineState) {
+fn engine() {
     let mut c = config::new();
     config::app(&mut c, "source", &basic_apps::Source {size: 60});
     config::app(&mut c, "sink", &basic_apps::Sink {});
     config::link(&mut c, "source.output -> sink.input");
-    engine::configure(s, &c);
+    engine::configure(&c);
     println!("Configured the app network: source(60).output -> sink.input");
-    engine::main(&s, Some(engine::Options{
+    engine::main(Some(engine::Options{
         duration: Some(Duration::new(0,0)),
         report_load: true, report_links: true,
         ..Default::default()
     }));
     let mut c = c.clone();
     config::app(&mut c, "source", &basic_apps::Source {size: 120});
-    engine::configure(s, &c);
+    engine::configure(&c);
     println!("Cloned, mutated, and applied new configuration:");
     println!("source(120).output -> sink.input");
-    engine::main(&s, Some(engine::Options{
-        done: Some(Box::new(|_, _| true)),
+    engine::main(Some(engine::Options{
+        done: Some(Box::new(|| true)),
         report_load: true, report_links: true,
         ..Default::default()
     }));
@@ -99,7 +97,7 @@ fn engine(s: &mut engine::EngineState) {
              stats.frees, stats.freebytes, stats.freebits);
 }
 
-fn breathe_order(s: &mut engine::EngineState) {
+fn breathe_order() {
     println!("Case 1:");
     let mut c = config::new();
     config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
@@ -110,10 +108,10 @@ fn breathe_order(s: &mut engine::EngineState) {
     config::link(&mut c, "b_t1.output -> c_t2.input");
     config::link(&mut c, "b_t1.output2 -> d_t3.input");
     config::link(&mut c, "d_t3.output -> b_t1.input2");
-    engine::configure(s, &c);
-    engine::report_links(s);
-    for name in &s.inhale { println!("pull {}", &name); }
-    for name in &s.exhale { println!("push {}", &name); }
+    engine::configure(&c);
+    engine::report_links();
+    for name in &engine::state().inhale { println!("pull {}", &name); }
+    for name in &engine::state().exhale { println!("push {}", &name); }
     println!("Case 2:");
     let mut c = config::new();
     config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
@@ -124,10 +122,10 @@ fn breathe_order(s: &mut engine::EngineState) {
     config::link(&mut c, "b_t1.output -> c_t2.input");
     config::link(&mut c, "b_t1.output2 -> d_t3.input");
     config::link(&mut c, "c_t2.output -> d_t3.input2");
-    engine::configure(s, &c);
-    engine::report_links(s);
-    for name in &s.inhale { println!("pull {}", &name); }
-    for name in &s.exhale { println!("push {}", &name); }
+    engine::configure(&c);
+    engine::report_links();
+    for name in &engine::state().inhale { println!("pull {}", &name); }
+    for name in &engine::state().exhale { println!("push {}", &name); }
     println!("Case 3:");
     let mut c = config::new();
     config::app(&mut c, "a_io1", &basic_apps::SourceSink {size: 60});
@@ -138,13 +136,13 @@ fn breathe_order(s: &mut engine::EngineState) {
     config::link(&mut c, "b_t1.output -> a_io1.input");
     config::link(&mut c, "b_t1.output2 -> c_t2.input2");
     config::link(&mut c, "c_t2.output -> a_io1.input2");
-    engine::configure(s, &c);
-    engine::report_links(s);
-    for name in &s.inhale { println!("pull {}", &name); }
-    for name in &s.exhale { println!("push {}", &name); }
+    engine::configure(&c);
+    engine::report_links();
+    for name in &engine::state().inhale { println!("pull {}", &name); }
+    for name in &engine::state().exhale { println!("push {}", &name); }
 }
 
-fn basic1 (s: &mut engine::EngineState, npackets: u64) {
+fn basic1 (npackets: u64) {
     let mut c = config::new();
     config::app(&mut c, "Source", &basic_apps::Source {size: 60});
     config::app(&mut c, "Tee", &basic_apps::Tee {});
@@ -152,11 +150,11 @@ fn basic1 (s: &mut engine::EngineState, npackets: u64) {
     config::link(&mut c, "Source.tx -> Tee.rx");
     config::link(&mut c, "Tee.tx1 -> Sink.rx1");
     config::link(&mut c, "Tee.tx2 -> Sink.rx2");
-    engine::configure(s, &c);
+    engine::configure(&c);
     let start = Instant::now();
-    let output = s.app_table.get("Source").unwrap().output.get("tx").unwrap();
+    let output = engine::state().app_table.get("Source").unwrap().output.get("tx").unwrap();
     while output.borrow().txpackets < npackets {
-        engine::main(&s, Some(engine::Options{
+        engine::main(Some(engine::Options{
             duration: Some(Duration::new(0, 10_000_000)), // 0.01s
             no_report: true,
             ..Default::default()
