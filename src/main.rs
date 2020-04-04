@@ -7,6 +7,8 @@ mod engine;
 mod config;
 mod lib;
 mod basic_apps;
+mod header;
+mod ethernet;
 mod ixy82599;
 mod ixy82599_app;
 
