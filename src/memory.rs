@@ -97,7 +97,7 @@ pub fn virtual_to_physical (virt_addr: *const ffi::c_void) -> u64 {
     assert!(virt_addr & 0x500000000000 == 0x500000000000,
             "Invalid DMA address: 0x{:x}\nDMA address tag check failed",
             virt_addr);
-    virt_addr | 0x500000000000
+    virt_addr ^ 0x500000000000
 }
 
 // Map a new HugeTLB page to an appropriate virtual address.
