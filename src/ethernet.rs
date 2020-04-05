@@ -3,6 +3,23 @@ use super::header;
 
 use std::mem;
 
+// ETHERNET
+//
+// This module contains an Ethernet header definition, a type for Ethernet
+// (MAC) addresses, and some related utilities.
+//
+//   MacAddress - six bytes
+//   ntop(&MacAddress) -> String - return string representation of MAC address
+//   pton(&str) -> MacAddress - parse MAC address from string representation
+//   Ethernet - struct for Ethernet headers
+//   Header<Ethernet>.dst() -> &MacAddress - get destination address
+//   Header<Ethernet>.set_dst(&MacAddress) - set destination address
+//   Header<Ethernet>.src() -> &MacAddress - get source address
+//   Header<Ethernet>.set_src(&MacAddress) - set source address
+//   Header<Ethernet>.ethertype() -> u16 - get ethertype
+//   Header<Ethernet>.set_ethertype(u16) - set ethertype
+//   Header<Ethernet>.swap() - swap source and destination addresses
+
 pub type MacAddress = [u8; 6];
 
 pub fn ntop(address: &MacAddress) -> String {
@@ -77,7 +94,7 @@ mod selftest {
     use super::*;
 
     #[test]
-    fn ethernet () {
+    fn ethernet() {
         let mut eth = header::new::<Ethernet>();
         eth.set_src(&pton("42:42:42:42:42:42"));
         eth.set_ethertype(0x0800);
