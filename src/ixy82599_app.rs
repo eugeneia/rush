@@ -14,6 +14,7 @@ impl engine::AppConfig for Ixy82599 {
 }
 pub struct Ixy82599App { ixy: RefCell<Box<dyn ixy82599::IxyDevice>> }
 impl engine::App for Ixy82599App {
+    fn has_pull(&self) -> bool { true }
     fn pull(&self, app: &engine::AppState) {
         if let Some(output) = app.output.get("output") {
             let mut output = output.borrow_mut();
@@ -21,6 +22,7 @@ impl engine::App for Ixy82599App {
             ixy.rx_batch(0, &mut output, engine::PULL_NPACKETS);
         }
     }
+    fn has_push(&self) -> bool { true }
     fn push(&self, app: &engine::AppState) {
         if let Some(input) = app.input.get("input") {
             let mut input = input.borrow_mut();
@@ -28,5 +30,6 @@ impl engine::App for Ixy82599App {
             ixy.tx_batch(0, &mut input);
         }
     }
+    fn has_stop(&self) -> bool { true }
     fn stop(&self) { panic!("NYI"); }
 }
