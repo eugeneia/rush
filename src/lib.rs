@@ -22,3 +22,21 @@ pub fn align(value: usize, size: usize) -> usize {
        value + size - (value % size)
    }
 }
+
+#[cfg(target_endian = "little")]
+pub fn htonl (l: u32) -> u32 { l.swap_bytes() }
+#[cfg(target_endian = "little")]
+pub fn ntohl (l: u32) -> u32 { l.swap_bytes() }
+#[cfg(target_endian = "little")]
+pub fn htons (s: u16) -> u16 { s.swap_bytes() }
+#[cfg(target_endian = "little")]
+pub fn ntohs (s: u16) -> u16 { s.swap_bytes() }
+#[cfg(target_endian = "big")]
+pub fn htonl (l: u32) -> u32 { l }
+#[cfg(target_endian = "big")]
+pub fn ntohl (l: u32) -> u32 { l }
+#[cfg(target_endian = "big")]
+pub fn htons (s: u16) -> u16 { s }
+#[cfg(target_endian = "big")]
+pub fn ntohs (s: u16) -> u16 { s }
+
