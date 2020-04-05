@@ -65,13 +65,13 @@ mod selftest {
         }
 
         let mut c = config::new();
-        let (nic0, nic1) = (Ixy82599 {pci: nic0}, Ixy82599 {pci: nic1});
-        config::app(&mut c, "nic0", &nic0);
-        config::app(&mut c, "nic1", &nic1);
-        let source = PacketGen { dst: String::from("52:54:00:00:00:00"),
-                                 src: String::from("52:54:00:00:00:00"),
-                                 size: 60 };
-        config::app(&mut c, "source", &source);
+        config::app(&mut c, "nic0", &Ixy82599 {pci: nic0});
+        config::app(&mut c, "nic1", &Ixy82599 {pci: nic1});
+        config::app(&mut c, "source", &PacketGen {
+            dst: String::from("52:54:00:00:00:01"),
+            src: String::from("52:54:00:00:00:02"),
+            size: 60
+        });
         config::app(&mut c, "sink", &basic_apps::Sink {});
         config::link(&mut c, "source.output -> nic0.input");
         config::link(&mut c, "nic1.output -> sink.input");

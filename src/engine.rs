@@ -131,6 +131,9 @@ pub trait AppClone: AppConfig {
 impl<T: AppConfig + Clone + 'static> AppClone for T {
     fn box_clone(&self) -> Box<dyn AppArg> { Box::new((*self).clone()) }
 }
+impl Clone for Box<dyn AppArg> {
+    fn clone(&self) -> Self { (*self).box_clone() }
+}
 
 // Configure the running app network to match (new) config.
 //
@@ -149,14 +152,14 @@ pub fn configure(config: &config::Config) {
     for name in apps {
         let old = &state.app_table.get(&name).unwrap().conf;
         match config.apps.get(&name) {
-            Some(new) => if !old.equal(*new) { stop_app(state, &name) },
+            Some(new) => if !old.equal(&**new) { stop_app(state, &name) },
             None => stop_app(state, &name)
         }
     }
     // Start new apps.
-    for (name, &arg) in config.apps.iter() {
+    for (name, app) in config.apps.iter() {
         if state.app_table.get(name).is_none() {
-            start_app(state, name, arg)
+            start_app(state, name, &**app)
         }
     }
     // Rebuild links.

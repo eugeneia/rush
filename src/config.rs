@@ -16,14 +16,14 @@ use regex::Regex;
 
 // Config can be applied by engine.
 #[derive(Clone)]
-pub struct Config<'conf> {
-    pub apps: HashMap<String, &'conf dyn engine::AppArg>,
+pub struct Config {
+    pub apps: HashMap<String, Box<dyn engine::AppArg>>,
     pub links: HashSet<String>
 }
 
 // API: Create a new configuration.
 // Initially there are no apps or links.
-pub fn new<'conf>() -> Config<'conf> {
+pub fn new() -> Config {
     Config { apps: HashMap::new(), links: HashSet::new() }
 }
 
@@ -35,9 +35,8 @@ pub fn new<'conf>() -> Config<'conf> {
 //   app is the engine::AppConfig object used to create the app instance.
 //
 // Example: config::app(&mut c, "source", &basic_apps::Source {size: 60})
-pub fn app<'conf>(config: &mut Config<'conf>,
-                  name: &str, app: &'conf dyn engine::AppArg) {
-    config.apps.insert(name.to_string(), app);
+pub fn app(config: &mut Config, name: &str, app: &dyn engine::AppArg) {
+    config.apps.insert(name.to_string(), app.box_clone());
 }
 
 // API: Add a link to the configuration.
