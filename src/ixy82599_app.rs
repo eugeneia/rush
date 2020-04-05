@@ -1,5 +1,6 @@
 use super::engine;
 use super::ixy82599;
+
 use std::cell::RefCell;
 
 // Ixy82599 app: drive an Intel 82599 network adapter
@@ -8,6 +9,8 @@ use std::cell::RefCell;
 pub struct Ixy82599 { pub pci: String }
 impl engine::AppConfig for Ixy82599 {
     fn new(&self) -> Box<dyn engine::App> {
+        assert!(unsafe { libc::getuid() } == 0,
+                "Need to be root to drive PCI devices");
         let ixy = ixy82599::ixy_init(&self.pci, 1, 1, 0).unwrap();
         Box::new(Ixy82599App {ixy: RefCell::new(ixy)})
     }
@@ -56,6 +59,10 @@ mod selftest {
         let nic1 = if let Ok(pci) = std::env::var("RUSH_INTEL10G1") { pci }
         else { println!("Skipping test (need RUSH_INTEL10G1)");
                return };
+        if unsafe { libc::getuid() } != 0 {
+            println!("Skipping test (need to be root)");
+            return
+        }
 
         let mut c = config::new();
         let (nic0, nic1) = (Ixy82599 {pci: nic0}, Ixy82599 {pci: nic1});
