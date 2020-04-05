@@ -91,6 +91,8 @@ pub trait App {
     fn pull(&self, _app: &AppState) { panic!("Pull called but not implemented"); }
     fn has_push(&self) -> bool { false }
     fn push(&self, _app: &AppState) { panic!("Push called but not implemented"); }
+    fn has_report(&self) -> bool { false }
+    fn report(&self) { panic!("Report called but not implemented"); }
     fn has_stop(&self) -> bool { false }
     fn stop(&self) { panic!("Stop called but not implemented"); }
 }
@@ -311,6 +313,7 @@ pub fn main(options: Option<Options>) {
     if !options.no_report {
         if options.report_load  { report_load(); }
         if options.report_links { report_links(); }
+        if options.report_apps  { report_apps(); }
     }
 
     unsafe { MONOTONIC_NOW = None; }
@@ -323,13 +326,15 @@ pub fn main(options: Option<Options>) {
 //  no_report: disable engine reporting before return
 //  report_load: print a load report upon return
 //  report_links: print summarized statistics for each link upon return
+//  report_apps: print app defined report for each app
 #[derive(Default)]
 pub struct Options {
     pub done: Option<Box<dyn Fn() -> bool>>,
     pub duration: Option<Duration>,
     pub no_report: bool,
     pub report_load: bool,
-    pub report_links: bool
+    pub report_links: bool,
+    pub report_apps: bool
 }
 
 // Return current monotonic time.
@@ -430,14 +435,31 @@ pub fn report_load() {
 
 // Print a link report (packets sent, percent dropped)
 pub fn report_links() {
+    println!("Link report:");
     let mut names: Vec<_> = state().link_table.keys().collect();
     names.sort();
     for name in names {
         let link = state().link_table.get(name).unwrap().borrow();
         let txpackets = link.txpackets;
         let txdrop = link.txdrop;
-        println!("{} sent on {} (loss rate: {}%)",
+        println!("  {} sent on {} (loss rate: {}%)",
                  txpackets, name, loss_rate(txdrop, txpackets));
+    }
+}
+
+// Print a report of all active apps
+pub fn report_apps() {
+    for (name, app) in state().app_table.iter() {
+        println!("App report for {}:", name);
+        match app.input.len()
+        { 0 => (),
+          1 => println!("  receiving from one input link"),
+          n => println!("  receiving from {} input links", n) }
+        match app.output.len()
+        { 0 => (),
+          1 => println!("  transmitting to one output link"),
+          n => println!("  transmitting to {} output links", n) }
+        if app.app.has_report() { app.app.report(); }
     }
 }
 

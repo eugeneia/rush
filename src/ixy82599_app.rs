@@ -12,10 +12,16 @@ impl engine::AppConfig for Ixy82599 {
         assert!(unsafe { libc::getuid() } == 0,
                 "Need to be root to drive PCI devices");
         let ixy = ixy82599::ixy_init(&self.pci, 1, 1, 0).unwrap();
-        Box::new(Ixy82599App {ixy: RefCell::new(ixy)})
+        Box::new(Ixy82599App {
+            ixy: RefCell::new(ixy),
+            stats: RefCell::new(Default::default())
+        })
     }
 }
-pub struct Ixy82599App { ixy: RefCell<Box<dyn ixy82599::IxyDevice>> }
+pub struct Ixy82599App {
+    ixy: RefCell<Box<dyn ixy82599::IxyDevice>>,
+    stats: RefCell<Box<ixy82599::DeviceStats>>
+}
 impl engine::App for Ixy82599App {
     fn has_pull(&self) -> bool { true }
     fn pull(&self, app: &engine::AppState) {
@@ -32,6 +38,22 @@ impl engine::App for Ixy82599App {
             let mut ixy = self.ixy.borrow_mut();
             ixy.tx_batch(0, &mut input);
         }
+    }
+    fn has_report(&self) -> bool { true }
+    fn report(&self) {
+        let ixy = self.ixy.borrow_mut();
+        let mut stats = self.stats.borrow_mut();
+        let last_rx_pkts = stats.rx_pkts;
+        let last_rx_bytes = stats.rx_bytes;
+        let last_tx_pkts = stats.tx_pkts;
+        let last_tx_bytes = stats.tx_bytes;
+        ixy.read_stats(&mut stats);
+        println!("  Device stats for {} since last report:",
+                 ixy.get_pci_addr());
+        println!("     rxpackets:\t{:10}", stats.rx_pkts - last_rx_pkts);
+        println!("     rxbytes:\t{:10}", stats.rx_bytes - last_rx_bytes);
+        println!("     txpackets:\t{:10}", stats.tx_pkts - last_tx_pkts);
+        println!("     txbytes:\t{:10}", stats.tx_bytes - last_tx_bytes);
     }
     fn has_stop(&self) -> bool { true }
     fn stop(&self) { panic!("NYI"); }
@@ -76,13 +98,11 @@ mod selftest {
         config::link(&mut c, "source.output -> nic0.input");
         config::link(&mut c, "nic1.output -> sink.input");
         engine::configure(&c);
-        println!("Configured");
-        for name in &engine::state().inhale { println!("pull {}", &name); }
-        for name in &engine::state().exhale { println!("push {}", &name); }
         for _ in 0..3 {
             engine::main(Some(engine::Options {
                 duration: Some(Duration::new(1, 0)),
                 report_load: true,
+                report_apps: true,
                 report_links: true,
                 ..Default::default()
             }));
