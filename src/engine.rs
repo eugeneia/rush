@@ -21,6 +21,7 @@
 
 use super::link;
 use super::config;
+use super::lib;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -419,10 +420,10 @@ pub fn report_load() {
             let bpp = if newfrees > 0 { newbytes / newfrees } else { 0 };
             println!("load: time: {:.2} fps: {} fpGbps: {:.3} fpb: {} bpp: {} sleep: {}",
                      interval,
-                     fps,
+                     lib::comma_value(fps),
                      fbps / 1e9,
-                     fpb,
-                     bpp,
+                     lib::comma_value(fpb),
+                     lib::comma_value(bpp),
                      SLEEP);
         }
         LASTLOADREPORT = Some(now());
@@ -443,7 +444,9 @@ pub fn report_links() {
         let txpackets = link.txpackets;
         let txdrop = link.txdrop;
         println!("  {} sent on {} (loss rate: {}%)",
-                 txpackets, name, loss_rate(txdrop, txpackets));
+                 lib::comma_value(txpackets),
+                 name,
+                 loss_rate(txdrop, txpackets));
     }
 }
 

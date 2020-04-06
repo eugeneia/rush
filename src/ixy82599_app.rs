@@ -1,4 +1,5 @@
 use super::engine;
+use super::lib;
 use super::ixy82599;
 
 use std::cell::RefCell;
@@ -50,10 +51,10 @@ impl engine::App for Ixy82599App {
         ixy.read_stats(&mut stats);
         println!("  Device stats for {} since last report:",
                  ixy.get_pci_addr());
-        println!("     rxpackets:\t{:10}", stats.rx_pkts - last_rx_pkts);
-        println!("     rxbytes:\t{:10}", stats.rx_bytes - last_rx_bytes);
-        println!("     txpackets:\t{:10}", stats.tx_pkts - last_tx_pkts);
-        println!("     txbytes:\t{:10}", stats.tx_bytes - last_tx_bytes);
+        println!("     rxpackets:\t{:10}", lib::comma_value(stats.rx_pkts - last_rx_pkts));
+        println!("     rxbytes:\t{:10}", lib::comma_value(stats.rx_bytes - last_rx_bytes));
+        println!("     txpackets:\t{:10}", lib::comma_value(stats.tx_pkts - last_tx_pkts));
+        println!("     txbytes:\t{:10}", lib::comma_value(stats.tx_bytes - last_tx_bytes));
     }
     fn has_stop(&self) -> bool { true }
     fn stop(&self) { panic!("NYI"); }
