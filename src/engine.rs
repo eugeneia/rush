@@ -355,6 +355,15 @@ pub fn timeout(duration: Duration) -> Box<dyn Fn() -> bool> {
     Box::new(move || now() > deadline)
 }
 
+// Return a throttle function.
+//
+// The throttle returns true at most once in any <duration> time interval.
+pub fn throttle(duration: Duration) -> Box<dyn FnMut() -> bool> {
+    let mut deadline = now();
+    Box::new(move || if now() > deadline { deadline = now() + duration; true }
+                     else                { false })
+}
+
 // Perform a single breath (inhale / exhale)
 fn breathe() {
     unsafe { MONOTONIC_NOW = Some(Instant::now()); }

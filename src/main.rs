@@ -39,12 +39,14 @@ mod tests {
         let output = engine::state().app_table
             .get("Source").unwrap()
             .output.get("tx").unwrap();
+        let mut report = engine::throttle(Duration::new(1, 0));
         while output.borrow().txpackets < npackets {
             engine::main(Some(engine::Options{
                 duration: Some(Duration::new(0, 10_000_000)), // 0.01s
                 no_report: true,
                 ..Default::default()
             }));
+            if report() { engine::report_load(); }
         }
         let finish = Instant::now();
         let runtime = finish.duration_since(start).as_secs_f64();
