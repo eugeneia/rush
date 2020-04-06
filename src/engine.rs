@@ -6,7 +6,7 @@
 //   EngineStats - struct containing global engine statistics
 //   stats() -> EngineStats - get engine statistics
 //   EngineState - struct representing engine state
-//   init() -> EngineState - initialize engine (can only be called once)
+//   state() -> &'static EngineState - get engine state
 //   SharedLink - type for shared links (between apps, also in EngineState)   
 //   AppState - struct representing an app in the current app network
 //   App, AppConfig - traits that defines an app, and its configuration
