@@ -13,6 +13,7 @@ use super::engine;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use regex::Regex;
+use once_cell::sync::Lazy;
 
 // Config can be applied by engine.
 #[derive(Clone)]
@@ -49,7 +50,7 @@ pub fn link(config: &mut Config, spec: &str) {
 // Given "a.out -> b.in" return
 //   LinkSpec { from: "a", output:"out", to: "b", input: "in" }.
 pub fn parse_link(spec: &str) -> LinkSpec {
-    if let Some(cap) = link_syntax().captures(spec) {
+    if let Some(cap) = LINK_SYNTAX.captures(spec) {
         LinkSpec {
             from: (&cap[1]).to_string(), output: (&cap[2]).to_string(),
             to: (&cap[3]).to_string(), input: (&cap[4]).to_string(),
@@ -64,9 +65,8 @@ pub struct LinkSpec {
     pub to: String, pub input: String
 }
 
-fn link_syntax() -> Regex {
-    Regex::new(r" *([\w_]+)\.([\w_]+) *-> *([\w_]+)\.([\w_]+) *").unwrap()
-}
+static LINK_SYNTAX: Lazy<Regex> = Lazy::new
+    (|| Regex::new(r" *([\w_]+)\.([\w_]+) *-> *([\w_]+)\.([\w_]+) *").unwrap());
 
 fn format_link(spec: &LinkSpec) -> String {
     format!("{}.{} -> {}.{}", spec.from, spec.output, spec.to, spec.input)
