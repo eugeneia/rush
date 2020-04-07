@@ -58,6 +58,7 @@ pub fn receive(r: &mut Link) -> Box<packet::Packet> {
     p
 }
 
+#[inline(always)]
 pub fn transmit(r: &mut Link, mut p: Box<packet::Packet>) {
     if full(r) {
         r.txdrop += 1;

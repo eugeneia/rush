@@ -88,6 +88,7 @@ fn preallocate_step () {
 // NB: we can use Box::from_raw safely on the packets "leaked" onto
 // the static FL. We can also be sure that the Box does not alias another
 // packet (see free).
+#[inline(always)]
 pub fn allocate() -> Box<Packet> {
     if unsafe { FL.nfree == 0 } {
         preallocate_step();
