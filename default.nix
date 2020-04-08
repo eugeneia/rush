@@ -2,25 +2,26 @@
 #   nix-build /path/to/this/directory
 # ... build products will be in ./result
 
-{ pkgs ? (import <nixpkgs> {}), source ? ./., version ? "dev" }:
+{ source ? ./., version ? "dev" }:
 
-with pkgs;
+let
+  moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz);
+  nixpkgs = import <nixpkgs> { overlays = [ moz_overlay ]; };
+in
+  with nixpkgs;
+  stdenv.mkDerivation {
+    name = "rush-${version}";
+    #src = lib.cleanSource (lib.sourceByRegex source ["target/*"]);
 
-stdenv.mkDerivation rec {
-  name = "rush-${version}";
-  #src = lib.cleanSource (lib.sourceByRegex source ["target/*"]);
+    buildInputs = [
+      # to use a specific nighly:
+      (nixpkgs.rustChannelOf { date = "2020-04-08"; channel = "nightly"; }).rust
+    ];
 
-  buildInputs = [ rustc cargo ];
   inherit version;
 
-  preBuild = ''
-    export RUST_TEST_THREADS=1
-  '';
-
-  # ...
-
-  shellHook = ''
-    runHook preBuild
-  '';
+  # Set Environment Variables
+  RUST_TEST_THREADS = 1;
+  RUST_BACKTRACE = 1;
 
 }
