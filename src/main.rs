@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(asm)]
 
 mod memory;
 mod packet;
@@ -11,6 +12,7 @@ mod header;
 mod ethernet;
 mod ixy82599;
 mod ixy82599_app;
+mod checksum;
 
 fn main() {
     println!("This could be the beginning of a beautiful network function...");
