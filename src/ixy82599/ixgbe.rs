@@ -9,7 +9,6 @@ use std::os::unix::io::RawFd;
 use std::ptr;
 use std::thread;
 use std::time::{Duration, Instant};
-use std::ffi;
 use std::cmp;
 
 use super::constants::*;
@@ -203,11 +202,7 @@ impl IxyDevice for IxgbeDevice {
                 unsafe {
                     ptr::write_volatile(
                         &mut (*desc).read.pkt_addr as *mut u64,
-                        memory::virtual_to_physical(
-                            (&mut (*queue.bufs_in_use[rx_index]).data)
-                                as *mut [u8]
-                                as *mut ffi::c_void
-                        )
+                        memory::virtual_to_physical((*queue.bufs_in_use[rx_index]).data.as_ptr())
                     );
                     ptr::write_volatile(&mut (*desc).read.hdr_addr as *mut u64, 0);
                 }
@@ -254,7 +249,7 @@ impl IxyDevice for IxgbeDevice {
                 unsafe {
                     ptr::write_volatile(
                         &mut (*queue.descriptors.add(cur_index)).read.buffer_addr as *mut u64,
-                        memory::virtual_to_physical(&mut p.data as *mut [u8] as *mut ffi::c_void)
+                        memory::virtual_to_physical(p.data.as_ptr())
                     );
                     ptr::write_volatile(
                         &mut (*queue.descriptors.add(cur_index)).read.cmd_type_len as *mut u32,
@@ -552,7 +547,7 @@ impl IxgbeDevice {
                 unsafe {
                     ptr::write_volatile(
                         &mut (*queue.descriptors.add(i)).read.pkt_addr as *mut u64,
-                        memory::virtual_to_physical(&mut np.data as *mut [u8] as *mut ffi::c_void)
+                        memory::virtual_to_physical(np.data.as_ptr())
                     );
 
                     ptr::write_volatile(
