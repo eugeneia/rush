@@ -22,7 +22,7 @@ struct Chunk {
 static mut CHUNKS: Lazy<Vec<Chunk>> = Lazy::new(|| Vec::new());
 
 // Allocate DMA-friendly memory. Return virtual memory pointer.
-pub fn dma_alloc (bytes: usize,  align: usize) -> *mut ffi::c_void {
+pub fn dma_alloc(bytes: usize,  align: usize) -> *mut u8 {
     assert!(bytes <= huge_page_size());
     // Get current chunk of memory to allocate from
     if unsafe { CHUNKS.len() } == 0 { allocate_next_chunk() }
@@ -34,10 +34,10 @@ pub fn dma_alloc (bytes: usize,  align: usize) -> *mut ffi::c_void {
         allocate_next_chunk();
         chunk = unsafe { CHUNKS.last_mut().unwrap() };
     }
-   // Slice out the memory we need
+    // Slice out the memory we need
     let offset = chunk.used;
     chunk.used = chunk.used + bytes;
-    (chunk.pointer + (offset as u64)) as *mut ffi::c_void
+    (chunk.pointer + (offset as u64)) as *mut u8
 }
 
 // Add a new chunk.
@@ -92,7 +92,7 @@ const TAG: u64 = 0x500000000000;
 // virtual_to_physical(ptr) -> u64
 //
 // Return the physical address of specially mapped DMA memory.
-pub fn virtual_to_physical (virt_addr: *const ffi::c_void) -> u64 {
+pub fn virtual_to_physical(virt_addr: *const u8) -> u64 {
     let virt_addr = virt_addr as u64;
     assert!(virt_addr & 0x500000000000 == 0x500000000000,
             "Invalid DMA address: 0x{:x}\nDMA address tag check failed",
