@@ -2,6 +2,7 @@ use std::cmp;
 use std::ptr;
 use regex::Regex;
 use once_cell::sync::Lazy;
+use core::ffi;
 
 pub fn fill(dst: &mut [u8], len: usize, val: u8) {
     unsafe {
@@ -47,3 +48,11 @@ static CVLEFTNUM: Lazy<Regex> = Lazy::new
     (|| Regex::new(r"^(\d\d?\d?)(\d{3}*)$").unwrap());
 static CVTHOUSANDS: Lazy<Regex> = Lazy::new
     (|| Regex::new(r"(\d{3})").unwrap());
+
+// Fill slice with random bytes.
+pub fn random_bytes(dst: &mut [u8], n: usize) {
+    let n = cmp::min(n, dst.len());
+    if unsafe {
+        libc::getrandom(dst.as_mut_ptr() as *mut ffi::c_void, n, 0)
+    } != n as isize { panic!("getrandom(2) failed"); }
+}
