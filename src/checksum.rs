@@ -228,6 +228,8 @@ mod selftest {
               01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16,
               01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16,
               01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15],
+            &[0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8,
+              0x01u8],
         ];
         for case in cases {
             for l in 0..=case.len() {
@@ -240,11 +242,22 @@ mod selftest {
 
     #[test]
     fn checksum_random() {
-        for l in 0..=1500 {
-            println!("random case {}", l);
-            let mut case = vec![0u8; l];
-            lib::random_bytes(&mut case, l);
-            assert_eq!(ipsum(&case, l, 0), checksum_rust(&case, l));
+        let mut progress = 1;
+        for i in 1..=32 { // Crank this up to run more random test cases
+            if i >= progress {
+                println!("{}", progress);
+                progress *= 2;
+            }
+            for l in 0..=1500 { // Tune this down (to e.g. 63) for faster cases
+                let mut case = vec![0u8; l];
+                lib::random_bytes(&mut case, l);
+                let r = checksum_rust(&case, l);
+                let n = ipsum(&case, l, 0);
+                if r != n {
+                    println!("{:?} len={} ref={} asm={}", &case, l, r, n);
+                    panic!("mismatch");
+                }
+            }
         }
     }
 
