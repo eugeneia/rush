@@ -99,6 +99,7 @@ cmp rcx, 4                # If index is less than 4.
 jl 5f                     # Jump to branch '5'.
 mov esi, dword ptr [rdi]  # Fetch 32-bit into rsi.
 add rax, rsi              # Sum acc with rsi. Accumulate carry.
+adc rax, 0                # Sum carry-bit into acc.
 sub rcx, 4                # Decrease index by 4.
 add rdi, 4                # Next 32-bit.
 5:
@@ -106,6 +107,7 @@ cmp rcx, 2                # If index is less than 2.
 jl 6f                     # Jump to branch '6'.
 movzx rsi, word ptr [rdi] # Fetch 16-bit into rsi.
 add rax, rsi              # Sum acc with rsi. Accumulate carry.
+adc rax, 0                # Sum carry-bit into acc.
 sub rcx, 2                # Decrease index by 2.
 add rdi, 2                # Next 16-bit.
 6:
@@ -113,6 +115,7 @@ cmp rcx, 1                # If index is less than 1.
 jl 7f                     # Jump to branch '7'.
 movzx rsi, byte ptr [rdi] # Fetch 8-bit into rsi.
 add rax, rsi              # Sum acc with rsi. Accumulate carry.
+adc rax, 0                # Sum carry-bit into acc.
 # Fold 64-bit into 16-bit.
 7:
 mov rsi, rax              # Assign acc to rsi.
