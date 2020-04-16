@@ -194,12 +194,12 @@ adc  x0, x0, xzr      // Sum carry-bit into acc.
 
 // Fold 64-bit into 16-bit.
 7:
-lsr x1, x0, 32
-adds w0, w0, w1
+lsr x1, x0, 32        // Store high 32 bit of acc in x1.
+adds w0, w0, w1       // 32-bit sum of acc and r1. Accumulate carry.
 adc w0, w0, wzr       // Sum carry to acc.
-uxth w2, w0
+uxth w2, w0           // Repeat for 16-bit.
 add w0, w2, w0, lsr 16
-add w0, w0, w0, lsr 16
+add w0, w0, w0, lsr 16 // (This sums the carry, if any, into acc.)
 // One's complement.
 mvn w0, w0
 // Swap.
