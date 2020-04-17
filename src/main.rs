@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![feature(test)]
 #![feature(asm)]
 
 mod memory;

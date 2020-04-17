@@ -219,6 +219,7 @@ rev16 w0, w0
 #[cfg(test)]
 mod selftest {
     use super::*;
+    extern crate test;
 
     #[test]
     fn checksum() {
@@ -230,9 +231,7 @@ mod selftest {
             &[01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16,
               01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16,
               01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16,
-              01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15],
-            &[0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8,
-              0x01u8],
+              01u8, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15]
         ];
         for case in cases {
             for l in 0..=case.len() {
@@ -240,6 +239,18 @@ mod selftest {
                 println!("{:?} {} {}", &case, l, n);
                 assert_eq!(ipsum(&case, l, 0), n);
             }
+        }
+    }
+
+    #[test]
+    fn checksum_carry() {
+        for l in 2..=63 {
+            let mut case = vec![0u8; l];
+            for i in 0..=l-2 { case[i] = 0xff; }
+            case[l-1] = 0x01;
+            let n = checksum_rust(&case, l);
+            println!("{:?} {} {}", &case, l, n);
+            assert_eq!(ipsum(&case, l, 0), n);
         }
     }
 
@@ -274,13 +285,44 @@ mod selftest {
             Ok(val) => val.parse::<usize>().unwrap(),
             _ => 60
         };
-        let case = vec![0u8; nchunks];
-        let mut acc = 0;
-        for _ in 1..=nchunks {
-            acc += ipsum(&case, chunksize, 0) as usize;
+        let mut case = vec![0u8; nchunks];
+        lib::random_bytes(&mut case, chunksize);
+        let mut i = 0;
+        while i < nchunks {
+            test::black_box(ipsum(&case, chunksize, 0));
+            test::black_box(i += 1);
         }
-        assert_eq!(acc, nchunks * 65535);
-        println!("Checksummed {} * {} byte chunks", nchunks, chunksize);
+        println!("Checksummed {} * {} byte chunks", i, chunksize);
+    }
+
+    #[test]
+    fn checksum_rampool_bench() {
+        let nchunks = match std::env::var("RUSH_CHECKSUM_NCHUNKS") {
+            Ok(val) => val.parse::<f64>().unwrap() as usize,
+            _ => 1_000_000
+        };
+        let chunksize = match std::env::var("RUSH_CHECKSUM_CHUNKSIZE") {
+            Ok(val) => val.parse::<usize>().unwrap(),
+            _ => 60
+        };
+	let poolsize = match std::env::var("RUSH_CHECKSUM_POOLSIZE") {
+	    Ok(val) => val.parse::<usize>().unwrap(),
+	    _ => 512 * 1024 // Typical ARM L2 cache size
+	};
+        assert!(poolsize & (poolsize - 1) == 0,
+                "poolsize must be a power of two");
+	let mut pool = vec![0u8; poolsize+chunksize];
+	lib::random_bytes(&mut pool, poolsize+chunksize);
+	let mut i = 0;
+	while i < nchunks {
+	    // Pick a slice with pseudo-random offset
+            let x = i as u32 * 0x85ebca6b;
+	    let case = &pool[x as usize & (poolsize-1)..];
+	    test::black_box(ipsum(&case, chunksize, 0));
+	    test::black_box(i += 1);
+        }
+        println!("Checksummed {} * {} byte chunks (RAM pool size {})",
+                 i, chunksize, poolsize);
     }
 
 }
