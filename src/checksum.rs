@@ -151,7 +151,7 @@ unsafe fn checksum(data: &[u8], length: usize, initial: u16) -> u16 {
     asm!("
 ands x5, x4, ~31
 rev16 w0, w0          // Swap initial to convert to host-bytes order.
-b.eq 2f               // skip 32 bytes at once block, carry flag cleared
+b.eq 2f               // Skip 32 bytes at once block, carry flag cleared (ands)
 
 1:
 ldp x1, x2, [x3], 16  // Load dword[0..1] and advance input
@@ -163,7 +163,7 @@ adcs x0, x0, x2       // Sum with carry dword[3].
 adc x0, x0, xzr       // Sum carry-bit into acc.
 subs x5, x5, 32       // Consume four dwords.
 b.gt 1b
-tst x5, 32            // clear carry flag
+tst x5, 32            // Clear carry flag (set by subs for b.gt)
 
 2:
 tbz x4, 4, 3f         // skip 16 bytes at once block
