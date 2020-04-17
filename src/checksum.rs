@@ -151,7 +151,7 @@ unsafe fn checksum(data: &[u8], length: usize, initial: u16) -> u16 {
     asm!("
 ands x5, x4, ~31
 rev16 w0, w0          // Swap initial to convert to host-bytes order.
-b.eq 2f               // skip 32 bytes at once block
+b.eq 2f               // skip 32 bytes at once block, carry flag cleared
 
 1:
 ldp x1, x2, [x3], 16  // Load dword[0..1] and advance input
@@ -163,42 +163,38 @@ adcs x0, x0, x2       // Sum with carry dword[3].
 adc x0, x0, xzr       // Sum carry-bit into acc.
 subs x5, x5, 32       // Consume four dwords.
 b.gt 1b
+tst x5, 32            // clear carry flag
 
 2:
 tbz x4, 4, 3f         // skip 16 bytes at once block
 ldp x1, x2, [x3], 16  // Load dword[0..1] and advance
 adds x0, x0, x1       // Sum with carry dword[0].
 adcs x0, x0, x2       // Sum with carry dword[1].
-adc x0, x0, xzr       // Sum carry-bit into acc.
 
 3:
 tbz x4, 3, 4f         // skip 8 bytes at once block
 ldr x2, [x3], 8       // Load dword and advance
-adds x0, x0, x2       // Sum acc with dword[0]. Accumulate carry.
-adc x0, x0, xzr       // Sum carry-bit into acc.
+adcs x0, x0, x2       // Sum acc with dword[0]. Accumulate carry.
 
 4:
 tbz x4, 2, 5f         // skip 4 bytes at once block
 ldr w1, [x3], 4       // Load word and advance
-adds x0, x0, x1       // Sum acc with word[0]. Accumulate carry.
-adc x0, x0, xzr       // Sum carry-bit into acc.
+adcs x0, x0, x1       // Sum acc with word[0]. Accumulate carry.
 
 5:
 tbz x4, 1, 6f         // skip 2 bytes at once block
 ldrh w1, [x3], 2      // Load hword and advance
-adds x0, x0, x1       // Sum acc with hword[0]. Accumulate carry.
-adc x0, x0, xzr       // Sum carry-bit into acc.
+adcs x0, x0, x1       // Sum acc with hword[0]. Accumulate carry.
 
 6:
 tbz x4, 0, 7f         // If size is less than 1.
 ldrb w1, [x3]         // Load byte.
-adds x0, x0, x1       // Sum acc with byte. Accumulate carry.
-adc  x0, x0, xzr      // Sum carry-bit into acc.
+adcs x0, x0, x1       // Sum acc with byte. Accumulate carry.
 
 // Fold 64-bit into 16-bit.
 7:
 lsr x1, x0, 32        // Store high 32 bit of acc in x1.
-adds w0, w0, w1       // 32-bit sum of acc and r1. Accumulate carry.
+adcs w0, w0, w1       // 32-bit sum of acc and r1. Accumulate carry.
 adc w0, w0, wzr       // Sum carry to acc.
 uxth w2, w0           // Repeat for 16-bit.
 add w0, w2, w0, lsr 16
