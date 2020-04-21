@@ -149,50 +149,74 @@ unsafe fn checksum(data: &[u8], length: usize, initial: u16) -> u16 {
     let mut acc = initial as u64;
     // Accumulative sum (x0: initial/acc, x1/2: tmp, x3: data, x4: size)
     asm!("
-ands x5, x4, ~31
+ands x5, x4, ~63
 rev16 w0, w0          // Swap initial to convert to host-bytes order.
-b.eq 2f               // Skip 32 bytes at once block, carry flag cleared (ands)
+b.eq 5f               // Skip 64 bytes at once block, carry flag cleared (ands)
 
-1:
+ld1 {v0.4s,v1.4s}, [x3], 32 // load 32 byte as vectors of uint32_t
+ld1 {v2.4s,v3.4s}, [x3], 32 // load 32 byte as vectors of uint32_t
+subs x5, x5, 64       // Consume 16 dwords.
+uaddlp v4.2d, v0.4s   // add pairs of 4 uint32_t to 2 uint64_t
+uaddlp v5.2d, v1.4s
+uaddlp v6.2d, v2.4s
+uaddlp v7.2d, v3.4s
+b.eq 66f               // Skip 64 byte loop
+
+6:
+ld1 {v0.4s,v1.4s}, [x3], 32 // load 32 byte as vectors of uint32_t
+ld1 {v2.4s,v3.4s}, [x3], 32 // load 32 byte as vectors of uint32_t
+subs x5, x5, 64       // Consume 16 dwords.
+uadalp v4.2d, v0.4s   // add pairs of 4 uint32_t to 2 uint64_t and accumulate
+uadalp v5.2d, v1.4s
+uadalp v6.2d, v2.4s
+uadalp v7.2d, v3.4s
+b.hi 6b
+
+66:
+add v4.2d, v4.2d, v5.2d
+add v6.2d, v6.2d, v7.2d
+add v4.2d, v4.2d, v6.2d
+addp d0, v4.2d        // accumulate all SIMD sums
+mov x1, v0.d[0]       // mov to GPR
+adds x0, x0, x1       // Sum acc with SIMD result, sets carry flag
+
+5:
+tbz x4, 5, 4f         // skip 16 bytes at once block
 ldp x1, x2, [x3], 16  // Load dword[0..1] and advance input
-adds x0, x0, x1       // Sum acc with dword[0].
+adcs x0, x0, x1       // Sum with carry dword[0].
 adcs x0, x0, x2       // Sum with carry dword[1].
 ldp x1, x2, [x3], 16  // Load dword[2..3] and advance input
 adcs x0, x0, x1       // Sum with carry dword[2].
 adcs x0, x0, x2       // Sum with carry dword[3].
-adc x0, x0, xzr       // Sum carry-bit into acc.
-subs x5, x5, 32       // Consume four dwords.
-b.gt 1b
-tst x5, 32            // Clear carry flag (set by subs for b.gt)
 
-2:
+4:
 tbz x4, 4, 3f         // skip 16 bytes at once block
 ldp x1, x2, [x3], 16  // Load dword[0..1] and advance
-adds x0, x0, x1       // Sum with carry dword[0].
+adcs x0, x0, x1       // Sum with carry dword[0].
 adcs x0, x0, x2       // Sum with carry dword[1].
 
 3:
-tbz x4, 3, 4f         // skip 8 bytes at once block
+tbz x4, 3, 2f         // skip 8 bytes at once block
 ldr x2, [x3], 8       // Load dword and advance
 adcs x0, x0, x2       // Sum acc with dword[0]. Accumulate carry.
 
-4:
-tbz x4, 2, 5f         // skip 4 bytes at once block
+2:
+tbz x4, 2, 1f         // skip 4 bytes at once block
 ldr w1, [x3], 4       // Load word and advance
 adcs x0, x0, x1       // Sum acc with word[0]. Accumulate carry.
 
-5:
-tbz x4, 1, 6f         // skip 2 bytes at once block
+1:
+tbz x4, 1, 0f         // skip 2 bytes at once block
 ldrh w1, [x3], 2      // Load hword and advance
 adcs x0, x0, x1       // Sum acc with hword[0]. Accumulate carry.
 
-6:
-tbz x4, 0, 7f         // If size is less than 1.
+0:
+tbz x4, 0, 10f         // If size is less than 1.
 ldrb w1, [x3]         // Load byte.
 adcs x0, x0, x1       // Sum acc with byte. Accumulate carry.
 
 // Fold 64-bit into 16-bit.
-7:
+10:
 lsr x1, x0, 32        // Store high 32 bit of acc in x1.
 adcs w0, w0, w1       // 32-bit sum of acc and r1. Accumulate carry.
 adc w0, w0, wzr       // Sum carry to acc.
@@ -206,7 +230,7 @@ rev16 w0, w0
 "
          :/* outputs */ "={x0}"(acc), "={x3}"(_ptr), "={x4}"(_size)
          :/* inputs */ "0"(acc), "1"(_ptr), "2"(_size)
-         :/* clobbers */ "x1", "x2", "x5"
+         :/* clobbers */ "x1", "x2", "x5", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7"
          :/* options */ "volatile"
     );
     acc as u16
