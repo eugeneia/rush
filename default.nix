@@ -2,26 +2,40 @@
 #   nix-build /path/to/this/directory
 # ... build products will be in ./result
 
-{ source ? ./., version ? "dev" }:
+# Cross-compile via
+#  https://github.com/mozilla/nixpkgs-mozilla/issues/91#issuecomment-464483970
+
+{ pkgs ? <nixpkgs>, source ? ./., version ? "dev", crossSystem ? null }:
 
 let
   moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz);
-  nixpkgs = import <nixpkgs> { overlays = [ moz_overlay ]; };
+  nixpkgs = import pkgs { overlays = [ moz_overlay ]; inherit crossSystem; };
+  targets = [ nixpkgs.stdenv.targetPlatform.config ];
 in
   with nixpkgs;
   stdenv.mkDerivation {
     name = "rush-${version}";
     #src = lib.cleanSource (lib.sourceByRegex source ["target/*"]);
 
-    buildInputs = [
+    # build time dependencies targeting the build platform
+    depsBuildBuild = [ buildPackages.stdenv.cc ];
+    HOST_CC = "cc";
+
+    # build time dependencies targeting the host platform
+    nativeBuildInputs = [
       # to use a specific nighly:
-      (nixpkgs.rustChannelOf { date = "2020-04-08"; channel = "nightly"; }).rust
+      ((buildPackages.buildPackages.rustChannelOf {date="2020-04-08"; channel="nightly";})
+         .rust.override { inherit targets; })
     ];
+    shellHook = ''
+      export RUSTFLAGS="-C linker=$CC"
+    '';
+    CARGO_BUILD_TARGET = targets;
 
-  inherit version;
+    inherit version;
 
-  # Set Environment Variables
-  RUST_TEST_THREADS = 1;
-  RUST_BACKTRACE = 1;
+    # Set Environment Variables
+    RUST_TEST_THREADS = 1;
+    RUST_BACKTRACE = 1;
 
 }

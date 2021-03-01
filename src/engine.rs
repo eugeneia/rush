@@ -47,7 +47,7 @@ pub fn add_freebytes(bytes: u64) { unsafe { STATS.freebytes += bytes; } }
 pub fn add_freebits (bits: u64)  { unsafe { STATS.freebits += bits; } }
 pub fn stats() -> &'static EngineStats { unsafe { &STATS } }
 
-// Global engine state; singleton obtained via engine::init()
+// Global engine state; singleton obtained via engine::state()
 //
 // The set of all active apps and links in the system, indexed by name.
 pub struct EngineState {
@@ -87,6 +87,7 @@ pub struct AppState {
 //   push: exhale packets out the the app network (move them from input links
 //         to output links, or peripheral device queues)
 //   stop: stop the app (deinitialize)
+//   report: print information about itself
 pub trait App {
     fn has_pull(&self) -> bool { false }
     fn pull(&self, _app: &AppState) { panic!("Pull called but not implemented"); }
