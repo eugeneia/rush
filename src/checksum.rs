@@ -61,153 +61,155 @@ pub fn ipsum(data: &[u8], length: usize, initial: u16) -> u16 {
 
 #[cfg(target_arch="x86_64")]
 unsafe fn checksum(data: &[u8], length: usize, initial: u16) -> u16 {
-    let mut _ptr = data.as_ptr();
-    let mut _size = length;
+    let ptr = data.as_ptr();
+    let size = length;
     let mut acc = initial as u64;
     asm!("
-.intel_syntax noprefix;
 # Accumulative sum.
-xchg al, ah               # Swap to convert to host-bytes order.
+xchg {acc:l}, {acc:h}          # Swap to convert to host-bytes order.
 1:
-cmp rcx, 32               # If index is less than 32.
-jl 2f                     # Jump to branch '2'.
-add rax, [rdi]            # Sum acc with qword[0].
-adc rax, [rdi + 8]        # Sum with carry qword[1].
-adc rax, [rdi + 16]       # Sum with carry qword[2].
-adc rax, [rdi + 24]       # Sum with carry qword[3]
-adc rax, 0                # Sum carry-bit into acc.
-sub rcx, 32               # Decrease index by 8.
-add rdi, 32               # Jump two qwords.
-jmp 1b                    # Go to beginning of loop.
+cmp {size}, 32                 # If index is less than 32.
+jl 2 f                         # Jump to branch '2'.
+add {acc}, [{ptr}]             # Sum acc with qword[0].
+adc {acc}, [{ptr} + 8]         # Sum with carry qword[1].
+adc {acc}, [{ptr} + 16]        # Sum with carry qword[2].
+adc {acc}, [{ptr} + 24]        # Sum with carry qword[3]
+adc {acc}, 0                   # Sum carry-bit into acc.
+sub {size}, 32                 # Decrease index by 8.
+add {ptr}, 32                  # Jump two qwords.
+jmp 1 b                        # Go to beginning of loop.
 2:
-cmp rcx, 16               # If index is less than 16.
-jl 3f                     # Jump to branch '3'.
-add rax, [rdi]            # Sum acc with qword[0].
-adc rax, [rdi + 8]        # Sum with carry qword[1].
-adc rax, 0                # Sum carry-bit into acc.
-sub rcx, 16               # Decrease index by 8.
-add rdi, 16               # Jump two qwords.
+cmp {size}, 16                 # If index is less than 16.
+jl 3 f                         # Jump to branch '3'.
+add {acc}, [{ptr}]             # Sum acc with qword[0].
+adc {acc}, [{ptr} + 8]         # Sum with carry qword[1].
+adc {acc}, 0                   # Sum carry-bit into acc.
+sub {size}, 16                 # Decrease index by 8.
+add {ptr}, 16                  # Jump two qwords.
 3:
-cmp rcx, 8                # If index is less than 8.
-jl 4f                     # Jump to branch '4'.
-add rax, [rdi]            # Sum acc with qword[0].
-adc rax, 0                # Sum carry-bit into acc.
-sub rcx, 8                # Decrease index by 8.
-add rdi, 8                # Next 64-bit.
+cmp {size}, 8                  # If index is less than 8.
+jl 4 f                         # Jump to branch '4'.
+add {acc}, [{ptr}]             # Sum acc with qword[0].
+adc {acc}, 0                   # Sum carry-bit into acc.
+sub {size}, 8                  # Decrease index by 8.
+add {ptr}, 8                   # Next 64-bit.
 4:
-cmp rcx, 4                # If index is less than 4.
-jl 5f                     # Jump to branch '5'.
-mov esi, dword ptr [rdi]  # Fetch 32-bit into rsi.
-add rax, rsi              # Sum acc with rsi. Accumulate carry.
-adc rax, 0                # Sum carry-bit into acc.
-sub rcx, 4                # Decrease index by 4.
-add rdi, 4                # Next 32-bit.
+cmp {size}, 4                  # If index is less than 4.
+jl 5 f                         # Jump to branch '5'.
+mov {tmp:e}, dword ptr [{ptr}] # Fetch 32-bit into tmp.
+add {acc}, {tmp}               # Sum acc with tmp. Accumulate carry.
+adc {acc}, 0                   # Sum carry-bit into acc.
+sub {size}, 4                  # Decrease index by 4.
+add {ptr}, 4                   # Next 32-bit.
 5:
-cmp rcx, 2                # If index is less than 2.
-jl 6f                     # Jump to branch '6'.
-movzx rsi, word ptr [rdi] # Fetch 16-bit into rsi.
-add rax, rsi              # Sum acc with rsi. Accumulate carry.
-adc rax, 0                # Sum carry-bit into acc.
-sub rcx, 2                # Decrease index by 2.
-add rdi, 2                # Next 16-bit.
+cmp {size}, 2                  # If index is less than 2.
+jl 6 f                         # Jump to branch '6'.
+movzx {tmp}, word ptr [{ptr}]  # Fetch 16-bit into tmp.
+add {acc}, {tmp}               # Sum acc with tmp. Accumulate carry.
+adc {acc}, 0                   # Sum carry-bit into acc.
+sub {size}, 2                  # Decrease index by 2.
+add {ptr}, 2                   # Next 16-bit.
 6:
-cmp rcx, 1                # If index is less than 1.
-jl 7f                     # Jump to branch '7'.
-movzx rsi, byte ptr [rdi] # Fetch 8-bit into rsi.
-add rax, rsi              # Sum acc with rsi. Accumulate carry.
-adc rax, 0                # Sum carry-bit into acc.
+cmp {size}, 1                  # If index is less than 1.
+jl 7 f                         # Jump to branch '7'.
+movzx {tmp}, byte ptr [{ptr}]  # Fetch 8-bit into tmp.
+add {acc}, {tmp}               # Sum acc with tmp. Accumulate carry.
+adc {acc}, 0                   # Sum carry-bit into acc.
 # Fold 64-bit into 16-bit.
 7:
-mov rsi, rax              # Assign acc to rsi.
-shr rsi, 32               # Shift rsi 32-bit. Stores higher part of acc.
-mov eax, eax              # Clear out higher-part of rax. Stores lower part of acc.
-add eax, esi              # 32-bit sum of acc and rsi.
-adc eax, 0                # Sum carry to acc.
-mov esi, eax              # Repeat for 16-bit.
-shr esi, 16
-and eax, 0x0000ffff
-add ax, si
-adc ax, 0
-# One's complement.
-not eax                   # One-complement of eax.
-and eax, 0xffff           # Clear out higher part of eax.
+mov {tmp}, {acc}               # Assign acc to tmp.
+shr {tmp}, 32                  # Shift tmp 32-bit. Stores higher part of acc.
+mov {acc:e}, {acc:e}           # Clear out higher-part of acc. Stores lower part of acc.
+add {acc:e}, {tmp:e}           # 32-bit sum of acc and tmp.
+adc {acc:e}, 0                 # Sum carry to acc.
+mov {tmp:e}, {acc:e}           # Repeat for 16-bit.
+shr {tmp:e}, 16
+and {acc:e}, 0x0000ffff
+add {acc:x}, {tmp:x}
+adc {acc:x}, 0
+# Ones' complement.
+not {acc:e}                    # Ones' complement of dword acc.
+and {acc:e}, 0xffff            # Clear out higher part of dword acc.
 # Swap.
-xchg al, ah
-"
-         :/* outputs */ "={ax}"(acc), "={rdi}"(_ptr), "={rcx}"(_size)
-         :/* inputs */ "0"(acc), "1"(_ptr), "2"(_size)
-         :/* clobbers */ "rsi"
-         :/* options */ "volatile"
+xchg {acc:l}, {acc:h}
+",
+         acc = inout(reg_abcd) acc,
+         ptr = inout(reg) ptr => _,
+         size = inout(reg) size => _,
+         tmp = out(reg) _,
+         options(nostack)
     );
     acc as u16
 }
 
 #[cfg(target_arch="aarch64")]
 unsafe fn checksum(data: &[u8], length: usize, initial: u16) -> u16 {
-    let mut _ptr = data.as_ptr();
-    let mut _size = length;
+    let ptr = data.as_ptr();
+    let size = length;
     let mut acc = initial as u64;
-    // Accumulative sum (x0: initial/acc, x1/2: tmp, x3: data, x4: size)
+    // Accumulative sum
     asm!("
-ands x5, x4, ~31
-rev16 w0, w0          // Swap initial to convert to host-bytes order.
-b.eq 2f               // Skip 32 bytes at once block, carry flag cleared (ands)
+ands {mod32}, {size}, ~31
+rev16 {acc:w}, {acc:w}          // Swap initial to convert to host-bytes order.
+b.eq 2f                         // Skip 32 bytes at once block, carry flag cleared (ands)
 
 1:
-ldp x1, x2, [x3], 16  // Load dword[0..1] and advance input
-adds x0, x0, x1       // Sum acc with dword[0].
-adcs x0, x0, x2       // Sum with carry dword[1].
-ldp x1, x2, [x3], 16  // Load dword[2..3] and advance input
-adcs x0, x0, x1       // Sum with carry dword[2].
-adcs x0, x0, x2       // Sum with carry dword[3].
-adc x0, x0, xzr       // Sum carry-bit into acc.
-subs x5, x5, 32       // Consume four dwords.
+ldp {tmp1}, {tmp2}, [{ptr}], 16 // Load dword[0..1] and advance input
+adds {acc}, {acc}, {tmp1}       // Sum acc with dword[0].
+adcs {acc}, {acc}, {tmp2}       // Sum with carry dword[1].
+ldp {tmp1}, {tmp2}, [{ptr}], 16 // Load dword[2..3] and advance input
+adcs {acc}, {acc}, {tmp1}       // Sum with carry dword[2].
+adcs {acc}, {acc}, {tmp2}       // Sum with carry dword[3].
+adc {acc}, {acc}, xzr           // Sum carry-bit into acc.
+subs {mod32}, {mod32}, 32       // Consume four dwords.
 b.gt 1b
-tst x5, 32            // Clear carry flag (set by subs for b.gt)
+tst {mod32}, 32                 // Clear carry flag (set by subs for b.gt)
 
 2:
-tbz x4, 4, 3f         // skip 16 bytes at once block
-ldp x1, x2, [x3], 16  // Load dword[0..1] and advance
-adds x0, x0, x1       // Sum with carry dword[0].
-adcs x0, x0, x2       // Sum with carry dword[1].
+tbz {size}, 4, 3f               // skip 16 bytes at once block
+ldp {tmp1}, {tmp2}, [{ptr}], 16 // Load dword[0..1] and advance
+adds {acc}, {acc}, {tmp1}       // Sum with carry dword[0].
+adcs {acc}, {acc}, {tmp2}       // Sum with carry dword[1].
 
 3:
-tbz x4, 3, 4f         // skip 8 bytes at once block
-ldr x2, [x3], 8       // Load dword and advance
-adcs x0, x0, x2       // Sum acc with dword[0]. Accumulate carry.
+tbz {size}, 3, 4f               // skip 8 bytes at once block
+ldr {tmp2}, [{ptr}], 8          // Load dword and advance
+adcs {acc}, {acc}, {tmp2}       // Sum acc with dword[0]. Accumulate carry.
 
 4:
-tbz x4, 2, 5f         // skip 4 bytes at once block
-ldr w1, [x3], 4       // Load word and advance
-adcs x0, x0, x1       // Sum acc with word[0]. Accumulate carry.
+tbz {size}, 2, 5f               // skip 4 bytes at once block
+ldr {tmp1:w}, [{ptr}], 4        // Load word and advance
+adcs {acc}, {acc}, {tmp1}       // Sum acc with word[0]. Accumulate carry.
 
 5:
-tbz x4, 1, 6f         // skip 2 bytes at once block
-ldrh w1, [x3], 2      // Load hword and advance
-adcs x0, x0, x1       // Sum acc with hword[0]. Accumulate carry.
+tbz {size}, 1, 6f               // skip 2 bytes at once block
+ldrh {tmp1:w}, [{ptr}], 2       // Load hword and advance
+adcs {acc}, {acc}, {tmp1}       // Sum acc with hword[0]. Accumulate carry.
 
 6:
-tbz x4, 0, 7f         // If size is less than 1.
-ldrb w1, [x3]         // Load byte.
-adcs x0, x0, x1       // Sum acc with byte. Accumulate carry.
+tbz {size}, 0, 7f               // If size is less than 1.
+ldrb {tmp1:w}, [{ptr}]          // Load byte.
+adcs {acc}, {acc}, {tmp1}       // Sum acc with byte. Accumulate carry.
 
 // Fold 64-bit into 16-bit.
 7:
-lsr x1, x0, 32        // Store high 32 bit of acc in x1.
-adcs w0, w0, w1       // 32-bit sum of acc and r1. Accumulate carry.
-adc w0, w0, wzr       // Sum carry to acc.
-uxth w2, w0           // Repeat for 16-bit.
-add w0, w2, w0, lsr 16
-add w0, w0, w0, lsr 16 // (This sums the carry, if any, into acc.)
+lsr {tmp1}, {acc}, 32           // Store high 32 bit of acc in tmp1.
+adcs {acc:w}, {acc:w}, {tmp1:w} // 32-bit sum of acc and r1. Accumulate carry.
+adc {acc:w}, {acc:w}, wzr       // Sum carry to acc.
+uxth {tmp2:w}, {acc:w}          // Repeat for 16-bit.
+add {acc:w}, {tmp2:w}, {acc:w}, lsr 16
+add {acc:w}, {acc:w}, {acc:w}, lsr 16  // (This sums the carry, if any, into acc.)
 // One's complement.
-mvn w0, w0
+mvn {acc:w}, {acc:w}
 // Swap.
-rev16 w0, w0
-"
-         :/* outputs */ "={x0}"(acc), "={x3}"(_ptr), "={x4}"(_size)
-         :/* inputs */ "0"(acc), "1"(_ptr), "2"(_size)
-         :/* clobbers */ "x1", "x2", "x5"
-         :/* options */ "volatile"
+rev16 {acc:w}, {acc:w}
+",
+         acc = inout(reg) acc,
+         ptr =  inout(reg) ptr => _,
+         size = inout(reg) size => _,
+         tmp1 = out(reg) _, tmp2 = out(reg) _,
+         mod32 = out(reg) _,
+         options(nostack)
     );
     acc as u16
 }
