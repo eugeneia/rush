@@ -24,7 +24,7 @@ in
     # build time dependencies targeting the host platform
     nativeBuildInputs = [
       # to use a specific nighly:
-      ((buildPackages.buildPackages.rustChannelOf {date="2020-04-08"; channel="nightly";})
+      ((buildPackages.buildPackages.rustChannelOf {date="2021-02-11"; channel="nightly";})
          .rust.override { inherit targets; })
     ];
     shellHook = ''

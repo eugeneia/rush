@@ -4,7 +4,6 @@
 //! It is designed to be readable, idiomatic Rust code.
 //! It supports Intel 82599 10GbE NICs (ixgbe family).
 
-#![warn(rust_2018_idioms)]
 #![allow(unused_parens)]
 
 use crate::link;
